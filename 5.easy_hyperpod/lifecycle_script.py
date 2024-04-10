@@ -158,6 +158,9 @@ def main(args):
     ## add ssh key authentication support
     ExecuteBashScript("./add_ssh_pem.sh").run()
         
+    ## preset storage
+    ExecuteBashScript("./setup_storage.sh").run()
+
     print("[INFO]: Success: All provisioning scripts completed")
 
 
