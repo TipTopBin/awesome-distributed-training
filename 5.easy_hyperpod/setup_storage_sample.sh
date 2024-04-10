@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # must be run a sudo
-# set -ex
+set -x
+# set -e # 发生错误时立即退出脚本
 
 AWS_REGION="${AWS_REGION}"
 HP_EFS_ID="${HP_EFS_ID}"
@@ -17,7 +18,7 @@ main() {
         sudo chmod 644 $HP_EFS_MP
 
         # sudo mount -t efs -o tls ${EFS_FS_ID}:/ /efs # Using the EFS mount helper
-        echo "${HP_EFS_ID}.efs.${AWS_REGION}.amazonaws.com:/ ${HP_EFS_MP} nfs4 nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport,_netdev 0 0" | sudo tee -a /etc/fstab
+        sudo echo "${HP_EFS_ID}.efs.${AWS_REGION}.amazonaws.com:/ ${HP_EFS_MP} nfs4 nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport,_netdev 0 0" | sudo tee -a /etc/fstab
 
         sudo mount -a
         sudo chown -hR +1000:+1000 $HP_EFS_MP*
@@ -31,7 +32,8 @@ main() {
     # mount-s3 [OPTIONS] <BUCKET_NAME> <DIRECTORY>
     if [ ! -z "$HP_S3_BUCKET" ]; then
         mkdir -p $HP_S3_MP
-        mount-s3 ${HP_S3_BUCKET} $HP_S3_MP
+        # sudo mount-s3 ${HP_S3_BUCKET} $HP_S3_MP --allow-other # 需要 root 权限
+        sudo mount-s3 ${HP_S3_BUCKET} $HP_S3_MP --max-threads 96 --part-size 16777216 --allow-other --allow-delete --maximum-throughput-gbps 100 --dir-mode 777
     fi
 
     ## s5cmd
