@@ -12,6 +12,7 @@ HP_S3_MP="${HP_S3_MP}"
 main() {
     ## EFS
     if [ ! -z "$HP_EFS_ID" ]; then
+        echo "Setup EFS"
         sudo mkdir -p $HP_EFS_MP
         sudo chmod 644 $HP_EFS_MP
 
@@ -24,6 +25,7 @@ main() {
     fi
 
     ## S3 Mountpoint
+    echo "Setup Mountpoint"
     wget https://s3.amazonaws.com/mountpoint-s3-release/latest/x86_64/mount-s3.deb
     sudo apt-get install -y ./mount-s3.deb    
     # mount-s3 [OPTIONS] <BUCKET_NAME> <DIRECTORY>
@@ -42,7 +44,6 @@ main() {
     # github has rate limit
     S5CMD_URL="https://github.com/peak/s5cmd/releases/download/v2.2.2/s5cmd_2.2.2_Linux-64bit.tar.gz"
     wget $S5CMD_URL -O /tmp/s5cmd.tar.gz
-    sudo mkdir -p /opt/s5cmd/
     sudo tar xzvf /tmp/s5cmd.tar.gz -C /usr/local/bin
 }
 
