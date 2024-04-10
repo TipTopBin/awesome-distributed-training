@@ -31,8 +31,8 @@ main() {
     # mount-s3 [OPTIONS] <BUCKET_NAME> <DIRECTORY>
     if [ ! -z "$HP_S3_BUCKET" ]; then
         mkdir -p $HP_S3_MP
-        sudo mount-s3 ${HP_S3_BUCKET} $HP_S3_MP --allow-other # 需要 root 权限
-        
+        # sudo mount-s3 ${HP_S3_BUCKET} $HP_S3_MP --allow-other # 需要 root 权限
+        sudo mount-s3 ${HP_S3_BUCKET} $HP_S3_MP --max-threads 96 --part-size 16777216 --allow-other --allow-delete --maximum-throughput-gbps 100 --dir-mode 777
     fi
 
     ## s5cmd
