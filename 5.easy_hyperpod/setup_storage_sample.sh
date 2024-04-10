@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # must be run a sudo
-# set -ex
+set -x
+# set -e # 发生错误时立即退出脚本
 
 AWS_REGION="${AWS_REGION}"
 HP_EFS_ID="${HP_EFS_ID}"
