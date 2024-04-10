@@ -8,11 +8,6 @@ HP_EFS_ID="${HP_EFS_ID}"
 HP_EFS_MP="${HP_EFS_MP}" # MOUNT_POINT
 HP_S3_BUCKET="${HP_S3_BUCKET}"
 HP_S3_MP="${HP_S3_MP}"
-# S3 Mountpoint
-
-
-# RAID 0
-
 
 main() {
     ## EFS
