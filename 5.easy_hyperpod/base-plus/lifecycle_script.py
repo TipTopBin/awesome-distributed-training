@@ -60,6 +60,7 @@ class ProvisioningParameters:
     WORKLOAD_MANAGER_KEY: str = "workload_manager"
     FSX_DNS_NAME: str = "fsx_dns_name"
     FSX_MOUNT_NAME: str = "fsx_mountname"
+    EFS_DNS_NAME: str = "efs_dns_name"
 
     def __init__(self, path: str):
         with open(path, "r") as f:
@@ -80,6 +81,14 @@ class ProvisioningParameters:
     @property
     def login_group(self) -> Optional[str]:
         return self._params.get("login_group")
+
+    @property
+    def efs_settings(self) -> Optional[str]:
+        return self._params.get(ProvisioningParameters.EFS_DNS_NAME)
+
+    @property
+    def s3_settings(self) -> Optional[List[Dict[str, str]]]:
+        return self._params.get("s3_buckets")
 
 def get_ip_address():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -151,6 +160,15 @@ def main(args):
         print(f"Mount fsx: {fsx_dns_name}. Mount point: {fsx_mountname}")
         ExecuteBashScript("./mount_fsx.sh").run(fsx_dns_name, fsx_mountname, "/fsx")
 
+    efs_dns_name = params.efs_settings
+    if efs_dns_name:
+        with open("share_users_with_accesspoint_id.txt") as file:
+            for line in file:
+                line = line.strip()
+                username, user_group_id, home_directory, accesspoint_id = line.split(sep=",")
+                # ExecuteBashScript("./mount_efs.sh").run(efs_dns_name, username, user_group_id, home_directory, accesspoint_id)
+                ExecuteBashScript("./mount_efs.sh").run(efs_dns_name, accesspoint_id, home_directory)
+    
     ExecuteBashScript("./add_users.sh").run()
 
     if params.workload_manager == "slurm":
@@ -201,12 +219,25 @@ def main(args):
                 ExecuteBashScript("./utils/install_head_node_exporter.sh").run()
                 ExecuteBashScript("./utils/install_prometheus.sh").run()
 
+        # Update Neuron SDK version to the version defined in update_neuron_sdk.sh
+        if Config.enable_observability:
+            if node_type == SlurmNodeType.COMPUTE_NODE:
+                ExecuteBashScript("./utils/update_neuron_sdk.sh").run()
+        
         # Install and configure SSSD for ActiveDirectory/LDAP integration
         if Config.enable_sssd:
             subprocess.run(["python3", "-u", "setup_sssd.py", "--node-type", node_type], check=True)
 
         if Config.enable_initsmhp:
             ExecuteBashScript("./initsmhp.sh").run(node_type)
+
+        s3_settings = params.s3_settings
+        if s3_settings:
+            for s3_config in s3_settings:
+                bucket_name = s3_config.get("bucket_name")
+                mount_point = s3_config.get("mount_point")
+                mount_options = s3_config.get("mount_options")
+                ExecuteBashScript("./mount_s3.sh").run(bucket_name, mount_options, mount_point)
 
     print("[INFO]: Success: All provisioning scripts completed")
 

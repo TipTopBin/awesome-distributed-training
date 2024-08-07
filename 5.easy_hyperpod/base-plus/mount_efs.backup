@@ -1,0 +1,67 @@
+#!/bin/bash
+
+
+# ```
+# # 可选步骤，如果您想使用 FSx 作为共享存储，请跳过
+# # 如果您想使用 EFS 作为共享存储，则请替换 EFS 的 DNS Name
+# source ~/.bashrc && cd /home/ec2-user/SageMaker/efs/${EFS_FS_NAME}/${HP_CLUSTER_NAME}/lifecycle
+
+# sed -i '0,/REPLACE_WITH_YOUR_EFS_DNS/s//'${EFS_FS_DNS}'/' custom.sh
+# ```
+
+# ```
+# # echo "Setup EFS"
+# # sudo apt-get update
+# # sudo apt-get -y install git binutils rustc cargo pkg-config libssl-dev
+# # git clone https://github.com/aws/efs-utils
+# # cd efs-utils
+# # ./build-deb.sh
+# # sudo apt-get -y install ./build/amazon-efs-utils*deb
+
+# # EFS_DNS_NAME="REPLACE_WITH_YOUR_EFS_DNS" # replace with your EFS dns
+# # MOUNT_POINT="/efs"
+# # if [[ "$EFS_DNS_NAME" != "REPLACE_WITH_YOUR_EFS_DNS" ]]; then
+# #     echo "Setup EFS"
+# #     sudo bash ./mount_efs.sh $EFS_DNS_NAME $MOUNT_POINT
+# # fi
+# ```
+
+# This script must be run with sudo privileges
+set -x
+set -e
+
+is_mounted() {
+  mountpoint -q "$1"
+  return $?
+}
+
+check_already_mounted() {
+  # Check if EFS is already mounted to $MOUNT_POINT
+  if is_mounted $MOUNT_POINT; then
+    if grep -qs "$EFS_DNS_NAME $MOUNT_POINT nfs4" /proc/mounts; then
+      echo "EFS is already mounted to $MOUNT_POINT. Exiting."
+      exit 0
+    else
+      echo "$MOUNT_POINT is mounted, but not to $EFS_DNS_NAME. Exiting."
+      exit 1
+    fi
+  fi
+}
+
+mount_fs() {
+  if [[ ! -d $MOUNT_POINT ]]; then
+    mkdir -p $MOUNT_POINT
+    chmod 644 $MOUNT_POINT
+  fi
+
+  if mount -t nfs4 -o nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport "$EFS_DNS_NAME":/ "$MOUNT_POINT"; then
+    if ! is_mounted $MOUNT_POINT; then
+      echo "Mounting EFS to $MOUNT_POINT directory was successful, but the mountpoint was not detected. Exiting."
+      exit 1
+    fi
+  else
+    echo "FAILED to mount EFS to $MOUNT_POINT directory. Exiting."
+    exit 1
+  fi
+}
+

@@ -59,5 +59,3 @@ echo "Setup s5cmd"
 S5CMD_URL="https://github.com/peak/s5cmd/releases/download/v2.2.2/s5cmd_2.2.2_Linux-64bit.tar.gz"
 wget $S5CMD_URL -O /tmp/s5cmd.tar.gz
 sudo tar xzvf /tmp/s5cmd.tar.gz -C /usr/local/bin
-
-
