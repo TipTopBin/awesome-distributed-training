@@ -55,16 +55,17 @@ class ProvisioningParameters:
         return self._params.get("s3_buckets")
 
 def main(args):
-    params = ProvisioningParameters("/home/ec2-user/SageMaker/efs/hp-efs/hp-demo/provisioning_parameters.json")    
+    # params = ProvisioningParameters("/home/ec2-user/SageMaker/efs/hp-efs/hp-demo/provisioning_parameters.json")
+    params = ProvisioningParameters("/tmp/ia-xxx-us-west-2/sagemaker/hp-demo/LifeCycleScripts/base-config/provisioning_parameters.json")        
     # Debug EFS
-    # efs_dns_name = "xxx"
-    # if efs_dns_name:
-    #     with open("share_users_with_accesspoint_id.txt") as file:
-    #         for line in file:
-    #             line = line.strip()
-    #             username, user_group_id, home_directory, accesspoint_id = line.split(sep=",")
-    #                 # ExecuteBashScript("./mount_efs.sh").run(efs_dns_name, username, user_group_id, home_directory, accesspoint_id)
-    #             ExecuteBashScript("./mount_efs.sh").run(efs_dns_name, accesspoint_id, home_directory)
+    efs_dns_name = "fs-xxx.efs.us-west-2.amazonaws.com"
+    if efs_dns_name:
+        with open("share_users_with_accesspoint_id.txt") as file:
+            for line in file:
+                line = line.strip()
+                username, user_group_id, mount_directory, accesspoint_id = line.split(sep=",")
+                    # ExecuteBashScript("./mount_efs.sh").run(efs_dns_name, username, user_group_id, home_directory, accesspoint_id)
+                ExecuteBashScript("./mount_efs.sh").run(efs_dns_name, mount_directory, accesspoint_id)
 
     # Debug S3
     # BUCKET_NAME = "hp-standard-us-west-2"
@@ -72,14 +73,14 @@ def main(args):
     # MOUNT_POINT = "/home/ec2-user/SageMaker/s3/hp-standard-2"
     # ExecuteBashScript("./mount_s3.sh").run(BUCKET_NAME, MOUNT_OPTIONS, MOUNT_POINT)
 
-    s3_settings = params.s3_settings
-    if s3_settings:
-        for s3_config in s3_settings:
-            bucket_name = s3_config.get("bucket_name")
-            mount_point = s3_config.get("mount_point")
-            mount_options = s3_config.get("mount_options")
-            # print(bucket_name, mount_point, mount_options)
-            ExecuteBashScript("./mount_s3.sh").run(bucket_name, mount_options, mount_point)
+    # s3_settings = params.s3_settings
+    # if s3_settings:
+    #     for s3_config in s3_settings:
+    #         bucket_name = s3_config.get("bucket_name")
+    #         mount_point = s3_config.get("mount_point")
+    #         mount_options = s3_config.get("mount_options")
+    #         # print(bucket_name, mount_point, mount_options)
+    #         ExecuteBashScript("./mount_s3.sh").run(bucket_name, mount_options, mount_point)
 
 
 if __name__ == "__main__":

@@ -165,9 +165,9 @@ def main(args):
         with open("share_users_with_accesspoint_id.txt") as file:
             for line in file:
                 line = line.strip()
-                username, user_group_id, home_directory, accesspoint_id = line.split(sep=",")
+                username, user_group_id, mount_directory, accesspoint_id = line.split(sep=",")
                 # ExecuteBashScript("./mount_efs.sh").run(efs_dns_name, username, user_group_id, home_directory, accesspoint_id)
-                ExecuteBashScript("./mount_efs.sh").run(efs_dns_name, accesspoint_id, home_directory)
+                ExecuteBashScript("./mount_efs.sh").run(efs_dns_name, mount_directory, accesspoint_id)
     
     ExecuteBashScript("./add_users.sh").run()
 
