@@ -35,7 +35,7 @@ add_to_fstab() {
   fi
 
   if ! grep -q "$EFS_DNS_NAME:/ $MOUNT_POINT" /etc/fstab; then
-    echo "$EFS_DNS_NAME:/ $MOUNT_POINT $mount_options 0 0" | sudo tee -a /etc/fstab
+    echo "$EFS_DNS_NAME:/ $MOUNT_POINT efs $mount_options 0 0" | sudo tee -a /etc/fstab
   else
     echo "EFS entry already exists in /etc/fstab"
   fi  
@@ -98,6 +98,9 @@ OnUnitActiveSec=1min
 [Install]
 WantedBy=timers.target
 EOF
+
+  systemctl daemon-reload
+  systemctl enable --now check_efs_mount.timer
 }
 
 main() {

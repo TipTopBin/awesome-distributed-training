@@ -112,7 +112,7 @@ main() {
   echo "mount_s3 called for bucket: $BUCKET_NAME with options: $MOUNT_OPTIONS, using mount_point: $MOUNT_POINT"  
   check_mount_s3_installed
   add_to_s3tab
-  # mount_fs
+  mount_fs
   install_remount_service
 }
 

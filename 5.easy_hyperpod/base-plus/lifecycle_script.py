@@ -162,12 +162,16 @@ def main(args):
 
     efs_dns_name = params.efs_settings
     if efs_dns_name:
-        with open("share_users_with_accesspoint_id.txt") as file:
+        with open("shared_users_efs.txt") as file:
             for line in file:
                 line = line.strip()
-                username, user_group_id, mount_directory, accesspoint_id = line.split(sep=",")
-                # ExecuteBashScript("./mount_efs.sh").run(efs_dns_name, username, user_group_id, home_directory, accesspoint_id)
-                ExecuteBashScript("./mount_efs.sh").run(efs_dns_name, mount_directory, accesspoint_id)
+                try:
+                    username, user_group_id, mount_directory, accesspoint_id = line.split(sep=",")
+                    ExecuteBashScript("./mount_efs.sh").run(efs_dns_name, mount_directory, accesspoint_id)
+                except ValueError as e:
+                    print(f"Error: {e}")
+                    print(f"Skipping line: {line}")
+                    continue
     
     ExecuteBashScript("./add_users.sh").run()
 
