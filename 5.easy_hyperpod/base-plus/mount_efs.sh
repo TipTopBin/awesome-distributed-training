@@ -74,10 +74,15 @@ install_remount_service() {
   CHECK_MOUNT_FILE=/opt/ml/scripts/check_mount_efs.sh
   cat > $CHECK_MOUNT_FILE << EOF
 #!/bin/bash
-if ! grep -qs "127.0.0.1:/" /proc/mounts; then
-  /usr/bin/mount -a
-else
+total_efs_entries=\$(grep -c "^fs-" /etc/fstab)
+mounted_efs_count=\$(grep -c "^127.0.0.1:/" /proc/mounts)
+
+if [ "\$mounted_efs_count" -eq "\$total_efs_entries" ]; then
   systemctl stop check_efs_mount.timer
+  echo "All mount efs operations completed successfully"  
+else
+  echo "mount efs"
+  /usr/bin/mount -a
 fi
 EOF
 
