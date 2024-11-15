@@ -20,12 +20,8 @@ GPUS_PER_NODE=8 # 4 for G5.12x, 8 for P4/P5
 ###########################
 
 ## Plenty of EFA level variables
-## Comment out for non-efa instances (G4d, P3)
-## For G5.12x, Comment out RDMA and Fork safe
 ## For G4dn and other G5, comment out all
-export FI_EFA_USE_DEVICE_RDMA=1 # use for p4d
-export FI_EFA_FORK_SAFE=1
-export FI_LOG_LEVEL=1
+export FI_LOG_LEVEL=warn
 export FI_PROVIDER=efa
 # export FI_EFA_USE_HUGE_PAGE=0    # Set to 0 when you see os.fork() causes OSError: Cannot allocate memory.  Disabling huge page causes minor performance hit.
 export NCCL_DEBUG=INFO
@@ -34,6 +30,9 @@ export NCCL_DEBUG=INFO
 ## Reduces memory synchronizations
 ## https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__UNIFIED.html
 export FI_EFA_SET_CUDA_SYNC_MEMOPS=0
+
+## Set HuggingFace metadata timeout (in seconds) for large clusters
+export HF_HUB_ETAG_TIMEOUT=60
 
 ###########################
 ####### Torch Dist  #######

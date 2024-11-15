@@ -44,6 +44,11 @@ export NCCL_BUFFSIZE=8388608
 ### https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/usage/p2p.html
 export NCCL_P2P_NET_CHUNKSIZE=524288
 
+### Improve performance for AllReduce by selecting specific protocol and algorithm for specific
+### message size and number of ranks.
+### More information https://github.com/aws/aws-ofi-nccl/wiki/Algorithm-and-Protocol-Tuner-for-AWS.
+export NCCL_TUNER_PLUGIN=/opt/aws-ofi-nccl/install/lib/libnccl-ofi-tuner.so
+
 
 declare -a ARGS=(
     --container-image $IMAGE
@@ -53,4 +58,4 @@ declare -a ARGS=(
 mpirun -N 1 bash -c 'echo $(hostname): $(cat /sys/devices/virtual/dmi/id/board_asset_tag | tr -d " ")'
 
 # Run NCCL test
-srun -u -l "${ARGS[@]}" --mpi=pmix --cpu-bind=none $NCCL_TESTS_PATH/all_reduce_perf -b 8 -e 16G -f 2 -g 1 -c 1 -n 100
+srun "${ARGS[@]}" --mpi=pmix --cpu-bind=none $NCCL_TESTS_PATH/all_reduce_perf -b 8 -e 16G -f 2 -g 1 -c 1 -n 100
