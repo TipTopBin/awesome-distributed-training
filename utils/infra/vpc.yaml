@@ -1,0 +1,1570 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Reinforced VPC with dual stack (IPv4 + IPv6)
+  Setup for large scale computations on AWS portable to multiple regions.
+  Public and and private subnets in all selected AZs.
+  An S3 Endpoint, Internet Gateway and NAT Gateway are deployed in the
+  public subnet if selected. Route tables are set for each subnet.
+  The VPC contains 2 CIDR blocks 192.168.0.0/16 and 100.66.0.0/16. 
+  The first CIDR is used for EC2 instances. The second is for containers. 
+  To keep it simple, TGW/CNE subnet not set.
+
+
+####################
+## Stack Metadata ##
+####################
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: General Configuration
+        Parameters:
+          - VPCName
+      - Label:
+          default: Availability Zones Configuration
+        Parameters:
+          - AvailabilityZones
+          - NumberOfAZs
+      - Label:
+          default: Network and Endpoint Configuration
+        Parameters:
+          - CreatePublicSubnets
+          - CreateS3Endpoint
+          - CreateS3ExpressEndpoint
+          - CreateDynamoDBEndpoint
+    ParameterLabels:
+      AvailabilityZones:
+        default: Availability Zones
+      VPCName:
+        default: Name of your VPC
+      NumberOfAZs:
+        default: Number of Availability Zones
+      CreatePublicSubnets:
+        default: Create public subnets
+      CreateS3Endpoint:
+        default: Create an S3 endpoint
+      CreateS3ExpressEndpoint:
+        default: Create an S3 Express endpoint        
+      CreateDynamoDBEndpoint:
+        default: Create a DynamoDB endpoint
+
+######################
+## Stack Parameters ##
+######################
+
+Parameters:
+
+  VPCName:
+    Description: 'Name of your VPC'
+    Default: 'SageVPC'
+    Type: String
+
+  AvailabilityZones:
+    Description: 'List of Availability Zones to use for the subnets in the VPC. Note: The logical order is preserved when deploying subnets.'
+    Type: List<AWS::EC2::AvailabilityZone::Name>
+
+  NumberOfAZs:
+    AllowedValues:
+      - '2'
+      - '3'
+      - '4'
+      - '5'
+      - '6'
+    Default: '3'
+    Description: Number of Availability Zones to use in the VPC. This must match your selections in the list of Availability Zones parameter.
+    Type: String
+
+  CreateS3Endpoint:
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Default: 'true'
+    Description:
+      Set to false if to avoid creating an S3 endpoint on your VPC.
+    Type: String
+
+  CreateS3ExpressEndpoint:
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Default: 'true'
+    Description:
+      Set to false if to avoid creating an S3 Express endpoint on your VPC.
+    Type: String
+
+  CreateDynamoDBEndpoint:
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Default: 'true'
+    Description:
+      Set to false if to avoid creating a DynamoDB endpoint on your VPC.
+    Type: String
+
+###############################
+## Conditions for Parameters ##
+###############################
+
+Conditions:
+  3AZCondition: !Or
+    - !Equals [!Ref 'NumberOfAZs', '3']
+    - !Condition '4AZCondition'
+  4AZCondition: !Or
+    - !Equals [!Ref 'NumberOfAZs', '4']
+    - !Condition '5AZCondition'
+  5AZCondition: !Or
+    - !Equals [!Ref 'NumberOfAZs', '5']
+    - !Condition '6AZCondition'
+  6AZCondition: !Equals [!Ref 'NumberOfAZs', '6']
+
+  # 3AZConditionPublic: !And
+  #   - !Condition 'PublicSubnetCondition'
+  #   - !Condition '3AZCondition'
+  3AZConditionPublic: !Condition '3AZCondition'
+  4AZConditionPublic: !Condition '4AZCondition'
+  5AZConditionPublic: !Condition '5AZCondition'
+  6AZConditionPublic: !Condition '6AZCondition'
+
+  S3EndpointCondition: !Equals [!Ref 'CreateS3Endpoint', 'true']
+  S3ExpressEndpointCondition: !Equals [!Ref 'CreateS3ExpressEndpoint', 'true']
+  DynamoDBEndpointCondition: !Equals [!Ref 'CreateDynamoDBEndpoint', 'true']
+
+#########################
+## VPC & Network Setup ##
+#########################
+
+Mappings:
+  Networking:
+    VPC:
+      CIDR0: 192.168.0.0/16
+      CIDR1: 100.66.0.0/16
+
+
+Resources:
+  # Create a VPC
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      CidrBlock: !FindInMap [Networking, VPC, CIDR0]
+      Tags:
+        - Key: Name
+          Value: !Ref VPCName
+
+  FlowLogsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: vpc-flow-logs.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: flowlogs-policy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            - logs:DescribeLogGroups
+            - logs:DescribeLogStreams
+            Resource: !GetAtt FlowLogsGroup.Arn
+  FlowLogsGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 7
+
+  FlowLogVPC:
+    Type: AWS::EC2::FlowLog
+    Properties:
+      DeliverLogsPermissionArn: !GetAtt FlowLogsRole.Arn
+      LogGroupName: FlowLogsGroup
+      ResourceId: !Ref VPC
+      ResourceType: VPC
+      TrafficType: ALL
+
+  VpcCidrBlock1:
+    Type: AWS::EC2::VPCCidrBlock
+    DependsOn: VPC
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !FindInMap [Networking, VPC, CIDR1]
+
+  IPv6CidrBlock:
+    Type: 'AWS::EC2::VPCCidrBlock'
+    Properties:
+      AmazonProvidedIpv6CidrBlock: true
+      VpcId: !Ref VPC
+
+  # Create an IGW and add it to the VPC
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  GatewayToInternet:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  EgressOnlyInternetGateway:
+    Type: 'AWS::EC2::EgressOnlyInternetGateway'
+    Properties:
+      VpcId: !Ref VPC
+
+  # Create a NAT GW then add it to the public subnet
+  NATGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt ElasticIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+      Tags:
+      - Key: Name
+        Value: !Join [ '-', [ !Ref VPCName, 'ExternalNatGateway', !Select [ 0, !Ref AvailabilityZones] ] ]
+
+  NATGateway2:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt ElasticIP2.AllocationId
+      SubnetId: !Ref PublicSubnet2
+      Tags:
+      - Key: Name
+        Value: !Join [ '-', [ !Ref VPCName, 'ExternalNatGateway', !Select [ 1, !Ref AvailabilityZones] ] ]
+
+  NATGateway3:
+    Condition: 3AZCondition
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt ElasticIP3.AllocationId
+      SubnetId: !Ref PublicSubnet3
+      Tags:
+      - Key: Name
+        Value: !Join [ '-', [ !Ref VPCName, 'ExternalNatGateway', !Select [ 2, !Ref AvailabilityZones] ] ]
+
+  NATGateway4:
+    Condition: 4AZCondition
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt ElasticIP4.AllocationId
+      SubnetId: !Ref PublicSubnet4
+      Tags:
+      - Key: Name
+        Value: !Join [ '-', [ !Ref VPCName, 'ExternalNatGateway', !Select [ 3, !Ref AvailabilityZones] ] ]
+
+  NATGateway5:
+    Condition: 5AZCondition
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt ElasticIP5.AllocationId
+      SubnetId: !Ref PublicSubnet5
+      Tags:
+      - Key: Name
+        Value: !Join [ '-', [ !Ref VPCName, 'ExternalNatGateway', !Select [ 4, !Ref AvailabilityZones] ] ]
+
+  NATGateway6:
+    Condition: 6AZCondition
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt ElasticIP6.AllocationId
+      SubnetId: !Ref PublicSubnet6
+      Tags:
+      - Key: Name
+        Value: !Join [ '-', [ !Ref VPCName, 'ExternalNatGateway', !Select [ 5, !Ref AvailabilityZones] ] ]
+
+  ElasticIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  ElasticIP2:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  ElasticIP3:
+    Condition: 3AZCondition
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  ElasticIP4:
+    Condition: 4AZCondition
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  ElasticIP5:
+    Condition: 5AZCondition
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  ElasticIP6:
+    Condition: 6AZCondition
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc            
+
+  # Build the public subnets
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    # DependsOn: VPC
+    DependsOn:
+      - IPv6CidrBlock    
+    Properties:
+      MapPublicIpOnLaunch: true
+      AssignIpv6AddressOnCreation: true
+      VpcId: !Ref VPC
+      CidrBlock: !Select [ 255, !Cidr [ !GetAtt VPC.CidrBlock, 256, 8 ]]
+      Ipv6CidrBlock: !Select [0, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]              
+      AvailabilityZone: !Select [ 0, !Ref AvailabilityZones]
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'PublicELBSubnet', !Select [ 0, !Ref AvailabilityZones] ] ]
+        - Key: kubernetes.io/role/elb
+          Value: 1
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    DependsOn:
+      - IPv6CidrBlock
+    Properties:
+      MapPublicIpOnLaunch: true
+      AssignIpv6AddressOnCreation: true
+      VpcId: !Ref VPC
+      CidrBlock: !Select [ 254, !Cidr [ !GetAtt VPC.CidrBlock, 256, 8 ]]
+      Ipv6CidrBlock: !Select [1, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]              
+      AvailabilityZone: !Select [ 1, !Ref AvailabilityZones]
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'PublicELBSubnet', !Select [ 1, !Ref AvailabilityZones] ] ]
+        - Key: kubernetes.io/role/elb
+          Value: 1
+
+  PublicSubnet3:
+    Condition: 3AZConditionPublic
+    Type: AWS::EC2::Subnet
+    DependsOn:
+      - IPv6CidrBlock
+    Properties:
+      MapPublicIpOnLaunch: true
+      AssignIpv6AddressOnCreation: true
+      VpcId: !Ref VPC
+      CidrBlock: !Select [ 253, !Cidr [ !GetAtt VPC.CidrBlock, 256, 8 ]]
+      Ipv6CidrBlock: !Select [2, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]              
+      AvailabilityZone: !Select [ 2, !Ref AvailabilityZones]
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'PublicELBSubnet', !Select [ 2, !Ref AvailabilityZones] ] ]
+        - Key: kubernetes.io/role/elb
+          Value: 1
+
+  PublicSubnet4:
+    Condition: 4AZConditionPublic
+    Type: AWS::EC2::Subnet
+    DependsOn:
+      - IPv6CidrBlock
+    Properties:
+      MapPublicIpOnLaunch: true
+      AssignIpv6AddressOnCreation: true
+      VpcId: !Ref VPC
+      CidrBlock: !Select [ 252, !Cidr [ !GetAtt VPC.CidrBlock, 256, 8 ]]
+      Ipv6CidrBlock: !Select [3, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]              
+      AvailabilityZone: !Select [ 3, !Ref AvailabilityZones]
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'PublicELBSubnet', !Select [ 3, !Ref AvailabilityZones] ] ]
+        - Key: kubernetes.io/role/elb
+          Value: 1
+
+  PublicSubnet5:
+    Condition: 5AZConditionPublic
+    Type: AWS::EC2::Subnet
+    DependsOn:
+      - IPv6CidrBlock
+    Properties:
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref VPC
+      CidrBlock: !Select [ 251, !Cidr [ !GetAtt VPC.CidrBlock, 256, 8 ]]
+      Ipv6CidrBlock: !Select [4, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]
+      AvailabilityZone: !Select [ 4, !Ref AvailabilityZones]
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'PublicELBSubnet', !Select [ 4, !Ref AvailabilityZones] ] ]
+        - Key: kubernetes.io/role/elb
+          Value: 1
+
+  PublicSubnet6:
+    Condition: 6AZConditionPublic
+    Type: AWS::EC2::Subnet
+    DependsOn:
+      - IPv6CidrBlock
+    Properties:
+      MapPublicIpOnLaunch: true
+      AssignIpv6AddressOnCreation: true
+      VpcId: !Ref VPC
+      CidrBlock: !Select [ 250, !Cidr [ !GetAtt VPC.CidrBlock, 256, 8 ]]
+      Ipv6CidrBlock: !Select [5, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]              
+      AvailabilityZone: !Select [ 5, !Ref AvailabilityZones]
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'PublicELBSubnet', !Select [ 5, !Ref AvailabilityZones] ] ]
+        - Key: kubernetes.io/role/elb
+          Value: 1
+
+  # Create the private subnets
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    DependsOn: [IPv6CidrBlock]
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Select [ 0, !Cidr [ !FindInMap [Networking, VPC, CIDR0], 6, 13 ]]
+      Ipv6CidrBlock: !Select [10, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]
+      AvailabilityZone: !Select [ 0, !Ref AvailabilityZones]
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'PrivateSubnet', !Select [ 0, !Ref AvailabilityZones]] ]
+        - Key: kubernetes.io/role/internal-elb
+          Value: 1
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    DependsOn: [IPv6CidrBlock]
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Select [ 1, !Cidr [ !FindInMap [Networking, VPC, CIDR0], 6, 13 ]]
+      Ipv6CidrBlock: !Select [11, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]
+      AvailabilityZone: !Select [ 1, !Ref AvailabilityZones]
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'PrivateSubnet', !Select [ 1, !Ref AvailabilityZones]] ]
+        - Key: kubernetes.io/role/internal-elb
+          Value: 1
+
+  PrivateSubnet3:
+    Condition: 3AZCondition
+    Type: AWS::EC2::Subnet
+    DependsOn: [IPv6CidrBlock]
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Select [ 2, !Cidr [ !FindInMap [Networking, VPC, CIDR0], 6, 13 ]]
+      Ipv6CidrBlock: !Select [12, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]
+      AvailabilityZone: !Select [ 2, !Ref AvailabilityZones]
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'PrivateSubnet', !Select [ 2, !Ref AvailabilityZones]] ]
+        - Key: kubernetes.io/role/internal-elb
+          Value: 1
+
+  PrivateSubnet4:
+    Condition: 4AZCondition
+    Type: AWS::EC2::Subnet
+    DependsOn: [IPv6CidrBlock]
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Select [ 3, !Cidr [ !FindInMap [Networking, VPC, CIDR0], 6, 13 ]]
+      Ipv6CidrBlock: !Select [13, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]
+      AvailabilityZone: !Select [ 3, !Ref AvailabilityZones]
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'PrivateSubnet', !Select [ 3, !Ref AvailabilityZones]] ]
+        - Key: kubernetes.io/role/internal-elb
+          Value: 1
+
+  PrivateSubnet5:
+    Condition: 5AZCondition
+    Type: AWS::EC2::Subnet
+    DependsOn: [IPv6CidrBlock]
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Select [ 4, !Cidr [ !FindInMap [Networking, VPC, CIDR0], 6, 13 ]]
+      Ipv6CidrBlock: !Select [14, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]
+      AvailabilityZone: !Select [ 4, !Ref AvailabilityZones]
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'PrivateSubnet', !Select [ 4, !Ref AvailabilityZones]] ]
+        - Key: kubernetes.io/role/internal-elb
+          Value: 1
+
+  PrivateSubnet6:
+    Condition: 6AZCondition
+    Type: AWS::EC2::Subnet
+    DependsOn: [IPv6CidrBlock]
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Select [ 5, !Cidr [ !FindInMap [Networking, VPC, CIDR0], 6, 13 ]]
+      Ipv6CidrBlock: !Select [15, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]
+      AvailabilityZone: !Select [ 5, !Ref AvailabilityZones]
+      Tags:
+        - Key: Name
+          Value: !Join [ ' ', [ !Ref VPCName, 'Private Subnet', !Select [ 5, !Ref AvailabilityZones]] ]
+
+  # Create the pod subnets
+  PodSubnet1:
+    Type: AWS::EC2::Subnet
+    DependsOn: [VpcCidrBlock1]
+    Properties:
+      VpcId: !Ref VPC
+      MapPublicIpOnLaunch: false
+      CidrBlock: !Select [ 0, !Cidr [ !FindInMap [Networking, VPC, CIDR1], 6, 13 ]]
+      Ipv6CidrBlock: !Select [20, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]
+      AvailabilityZone: !Select [ 0, !Ref AvailabilityZones]
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'PodSubnet', !Select [ 0, !Ref AvailabilityZones]] ]
+
+  PodSubnet2:
+    Type: AWS::EC2::Subnet
+    DependsOn: [VpcCidrBlock1]
+    Properties:
+      VpcId: !Ref VPC
+      MapPublicIpOnLaunch: false
+      CidrBlock: !Select [ 1, !Cidr [ !FindInMap [Networking, VPC, CIDR1], 6, 13 ]]
+      Ipv6CidrBlock: !Select [21, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]
+      AvailabilityZone: !Select [ 1, !Ref AvailabilityZones]
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'PodSubnet', !Select [ 1, !Ref AvailabilityZones]] ]
+
+  PodSubnet3:
+    Condition: 3AZCondition
+    Type: AWS::EC2::Subnet
+    DependsOn: [VpcCidrBlock1]
+    Properties:
+      VpcId: !Ref VPC
+      MapPublicIpOnLaunch: false
+      CidrBlock: !Select [ 2, !Cidr [ !FindInMap [Networking, VPC, CIDR1], 6, 13 ]]
+      Ipv6CidrBlock: !Select [22, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]
+      AvailabilityZone: !Select [ 2, !Ref AvailabilityZones]
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'PodSubnet', !Select [ 2, !Ref AvailabilityZones]] ]
+
+  PodSubnet4:
+    Condition: 4AZCondition
+    Type: AWS::EC2::Subnet
+    DependsOn: [VpcCidrBlock1]
+    Properties:
+      VpcId: !Ref VPC
+      MapPublicIpOnLaunch: false
+      CidrBlock: !Select [ 3, !Cidr [ !FindInMap [Networking, VPC, CIDR1], 6, 13 ]]
+      Ipv6CidrBlock: !Select [23, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]
+      AvailabilityZone: !Select [ 3, !Ref AvailabilityZones]
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'PodSubnet', !Select [ 3, !Ref AvailabilityZones]] ]
+
+  PodSubnet5:
+    Condition: 5AZCondition
+    Type: AWS::EC2::Subnet
+    DependsOn: [VpcCidrBlock1]
+    Properties:
+      VpcId: !Ref VPC
+      MapPublicIpOnLaunch: false
+      CidrBlock: !Select [ 4, !Cidr [ !FindInMap [Networking, VPC, CIDR1], 6, 13 ]]
+      Ipv6CidrBlock: !Select [24, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]
+      AvailabilityZone: !Select [ 4, !Ref AvailabilityZones]
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'PodSubnet', !Select [ 4, !Ref AvailabilityZones]] ]
+
+  PodSubnet6:
+    Condition: 6AZCondition
+    Type: AWS::EC2::Subnet
+    DependsOn: [VpcCidrBlock1]
+    Properties:
+      VpcId: !Ref VPC
+      MapPublicIpOnLaunch: false
+      CidrBlock: !Select [ 5, !Cidr [ !FindInMap [Networking, VPC, CIDR1], 6, 13 ]]
+      Ipv6CidrBlock: !Select [25, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]
+      AvailabilityZone: !Select [ 5, !Ref AvailabilityZones]
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'PodSubnet', !Select [ 5, !Ref AvailabilityZones]] ]                                        
+
+
+  # Create and set the public route table
+  EdgeRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: !Join [ '-', [ !Ref VPCName, 'EdgeRTB'] ]                                        
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    DependsOn: VPC
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: !Join [ '-', [ !Ref VPCName, 'PublicRTB'] ]                                        
+
+  PublicRoute1:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref InternetGateway
+
+  # Associate the public route table to the public subnet
+  EdgeRouteTableAssociation:
+    Type: AWS::EC2::GatewayRouteTableAssociation
+    Properties: 
+      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref EdgeRouteTable
+
+  PublicSubnetRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    DependsOn:
+      - PublicRouteTable
+      - PublicSubnet1
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    DependsOn:
+      - PublicRouteTable
+      - PublicSubnet2
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnetRouteTableAssociation3:
+    Condition: 3AZConditionPublic
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    DependsOn:
+      - PublicRouteTable
+      - PublicSubnet3
+    Properties:
+      SubnetId: !Ref PublicSubnet3
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnetRouteTableAssociation4:
+    Condition: 4AZConditionPublic
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    DependsOn:
+      - PublicRouteTable
+      - PublicSubnet4
+    Properties:
+      SubnetId: !Ref PublicSubnet4
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnetRouteTableAssociation5:
+    Condition: 5AZConditionPublic
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    DependsOn:
+      - PublicRouteTable
+      - PublicSubnet5
+    Properties:
+      SubnetId: !Ref PublicSubnet5
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnetRouteTableAssociation6:
+    Condition: 6AZConditionPublic
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    DependsOn:
+      - PublicRouteTable
+      - PublicSubnet6
+    Properties:
+      SubnetId: !Ref PublicSubnet6
+      RouteTableId: !Ref PublicRouteTable
+
+  # Then the private route table
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    DependsOn: VPC
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'PrivateRTB', !Select [ 0, !Ref AvailabilityZones]] ]                                        
+
+  PrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    DependsOn: VPC
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'PrivateRTB', !Select [ 1, !Ref AvailabilityZones]] ]                                        
+
+  PrivateRouteTable3:
+    Condition: 3AZCondition
+    Type: AWS::EC2::RouteTable
+    DependsOn: VPC
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'PrivateRTB', !Select [ 2, !Ref AvailabilityZones]] ]                                        
+
+  PrivateRouteTable4:
+    Condition: 4AZCondition
+    Type: AWS::EC2::RouteTable
+    DependsOn: VPC
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'PrivateRTB', !Select [ 3, !Ref AvailabilityZones]] ]                                        
+
+  PrivateRouteTable5:
+    Condition: 5AZCondition
+    Type: AWS::EC2::RouteTable
+    DependsOn: VPC
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'PrivateRTB', !Select [ 4, !Ref AvailabilityZones]] ]                                        
+
+  PrivateRouteTable6:
+    Condition: 6AZCondition
+    Type: AWS::EC2::RouteTable
+    DependsOn: VPC
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'PrivateRTB', !Select [ 5, !Ref AvailabilityZones]] ]                                        
+
+
+  PrivateRouteToInternet:
+    Type: AWS::EC2::Route
+    DependsOn:
+      - VPC
+      - NATGateway
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId: !Ref NATGateway
+
+  PrivateRoute2:
+    DependsOn:
+      - VPC
+      - NATGateway2
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway2
+
+  PrivateRoute3:
+    Condition: 3AZCondition
+    DependsOn:
+      - VPC
+      - NATGateway3
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable3
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway3
+
+  PrivateRoute4:
+    Condition: 4AZCondition
+    DependsOn:
+      - VPC
+      - NATGateway4
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable4
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway4
+
+  PrivateRoute5:
+    Condition: 5AZCondition
+    DependsOn:
+      - VPC
+      - NATGateway5
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable5
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway5
+
+  PrivateRoute6:
+    Condition: 6AZCondition
+    DependsOn:
+      - VPC
+      - NATGateway6
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable6
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway6
+
+  # and the private subnets to the private route table
+  PrivateSubnet1RTAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+  
+  PrivateSubnet2RTAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable2
+
+  PrivateSubnet3RTAssociation:
+    Condition: 3AZCondition
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet3
+      RouteTableId: !Ref PrivateRouteTable3
+
+  PrivateSubnet4RTAssociation:
+    Condition: 4AZCondition
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet4
+      RouteTableId: !Ref PrivateRouteTable4
+
+  PrivateSubnet5RTAssociation:
+    Condition: 5AZCondition
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet5
+      RouteTableId: !Ref PrivateRouteTable5
+
+  PrivateSubnet6RTAssociation:
+    Condition: 6AZCondition
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet6
+      RouteTableId: !Ref PrivateRouteTable6
+
+  # pod route table
+  PodRouteTable:
+    Type: AWS::EC2::RouteTable
+    DependsOn: VPC
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'PodRTB', !Select [ 0, !Ref AvailabilityZones]] ]                                        
+
+  PodRouteTable2:
+    Type: AWS::EC2::RouteTable
+    DependsOn: VPC
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'PodRTB', !Select [ 1, !Ref AvailabilityZones]] ]                                        
+
+  PodRouteTable3:
+    Condition: 3AZCondition
+    Type: AWS::EC2::RouteTable
+    DependsOn: VPC
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'PodRTB', !Select [ 2, !Ref AvailabilityZones]] ]                                        
+
+  PodRouteTable4:
+    Condition: 4AZCondition
+    Type: AWS::EC2::RouteTable
+    DependsOn: VPC
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'PodRTB', !Select [ 3, !Ref AvailabilityZones]] ]                                        
+
+  PodRouteTable5:
+    Condition: 5AZCondition
+    Type: AWS::EC2::RouteTable
+    DependsOn: VPC
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'PodRTB', !Select [ 4, !Ref AvailabilityZones]] ]                                        
+
+  PodRouteTable6:
+    Condition: 6AZCondition
+    Type: AWS::EC2::RouteTable
+    DependsOn: VPC
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'PodRTB', !Select [ 5, !Ref AvailabilityZones]] ]                                        
+
+  PodRouteToInternet:
+    Type: AWS::EC2::Route
+    DependsOn:
+      - VPC
+      - NATGateway
+    Properties:
+      RouteTableId: !Ref PodRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId: !Ref NATGateway
+
+  PodRoute2:
+    DependsOn:
+      - VPC
+      - NATGateway2
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PodRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway2
+
+  PodRoute3:
+    Condition: 3AZCondition
+    DependsOn:
+      - VPC
+      - NATGateway3
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PodRouteTable3
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway3
+
+  PodRoute4:
+    Condition: 4AZCondition
+    DependsOn:
+      - VPC
+      - NATGateway4
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PodRouteTable4
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway4
+
+  PodRoute5:
+    Condition: 5AZCondition
+    DependsOn:
+      - VPC
+      - NATGateway5
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PodRouteTable5
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway5
+
+  PodRoute6:
+    Condition: 6AZCondition
+    DependsOn:
+      - VPC
+      - NATGateway6
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PodRouteTable6
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway6
+
+  # and the Pod subnets to the Pod route table
+  PodSubnet1RTAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PodSubnet1
+      RouteTableId: !Ref PodRouteTable
+  
+  PodSubnet2RTAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PodSubnet2
+      RouteTableId: !Ref PodRouteTable2
+
+  PodSubnet3RTAssociation:
+    Condition: 3AZCondition
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PodSubnet3
+      RouteTableId: !Ref PodRouteTable3
+
+  PodSubnet4RTAssociation:
+    Condition: 4AZCondition
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PodSubnet4
+      RouteTableId: !Ref PodRouteTable4
+
+  PodSubnet5RTAssociation:
+    Condition: 5AZCondition
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PodSubnet5
+      RouteTableId: !Ref PodRouteTable5
+
+  PodSubnet6RTAssociation:
+    Condition: 6AZCondition
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PodSubnet6
+      RouteTableId: !Ref PodRouteTable6
+
+
+  #####################################################
+  # IPv6 routes  #
+  #####################################################
+  IPv6PublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationIpv6CidrBlock: "::/0"
+      GatewayId: !Ref InternetGateway
+
+  IPv6PrivateRoute1:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationIpv6CidrBlock: '::/0'
+      EgressOnlyInternetGatewayId: !Ref EgressOnlyInternetGateway      
+
+  IPv6PrivateRoute2:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable2
+      DestinationIpv6CidrBlock: "::/0"
+      EgressOnlyInternetGatewayId: !Ref EgressOnlyInternetGateway
+
+  IPv6PrivateRoute3:
+    Condition: 3AZConditionPublic
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable3
+      DestinationIpv6CidrBlock: "::/0"
+      EgressOnlyInternetGatewayId: !Ref EgressOnlyInternetGateway
+
+  IPv6PrivateRoute4:
+    Condition: 4AZConditionPublic
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable4
+      DestinationIpv6CidrBlock: "::/0"
+      EgressOnlyInternetGatewayId: !Ref EgressOnlyInternetGateway
+
+  IPv6PrivateRoute5:
+    Condition: 5AZConditionPublic
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable5
+      DestinationIpv6CidrBlock: "::/0"
+      EgressOnlyInternetGatewayId: !Ref EgressOnlyInternetGateway
+
+  IPv6PrivateRoute6:
+    Condition: 6AZConditionPublic
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable6
+      DestinationIpv6CidrBlock: "::/0"
+      EgressOnlyInternetGatewayId: !Ref EgressOnlyInternetGateway
+
+
+
+  #######################################################
+  # Security Groups     #
+  #######################################################
+  ControlPlaneSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Cluster communication with worker nodes
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: !FindInMap [Networking, VPC, CIDR0]
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: !FindInMap [Networking, VPC, CIDR1]   
+      Tags:
+      - Key: Name
+        Value: !Join [ '-', [ !Ref VPCName, 'SG', 'control-plane'] ]                                        
+
+  ControlPlaneSecurityGroupIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+        GroupId: !Ref ControlPlaneSecurityGroup
+        IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt ControlPlaneSecurityGroup.GroupId
+
+  AdditionalSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Additional security groups for EFA and FSx
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 2049 # EFS
+          ToPort: 2049
+          CidrIp: 0.0.0.0/0       
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0      
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: !FindInMap [Networking, VPC, CIDR0]
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: !FindInMap [Networking, VPC, CIDR1]
+        - IpProtocol: tcp
+          FromPort: 988
+          ToPort: 988
+          CidrIp: !FindInMap [Networking, VPC, CIDR0]
+        - IpProtocol: tcp
+          FromPort: 1021
+          ToPort: 1023
+          CidrIp: !FindInMap [Networking, VPC, CIDR0]
+        - IpProtocol: tcp
+          FromPort: 988
+          ToPort: 988
+          CidrIp: !FindInMap [Networking, VPC, CIDR1]
+        - IpProtocol: tcp
+          FromPort: 1021
+          ToPort: 1023
+          CidrIp: !FindInMap [Networking, VPC, CIDR1]  
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 988
+          ToPort: 988
+          CidrIp: !FindInMap [Networking, VPC, CIDR0]
+        - IpProtocol: tcp
+          FromPort: 1021
+          ToPort: 1023
+          CidrIp: !FindInMap [Networking, VPC, CIDR0]
+        - IpProtocol: tcp
+          FromPort: 988
+          ToPort: 988
+          CidrIp: !FindInMap [Networking, VPC, CIDR1]
+        - IpProtocol: tcp
+          FromPort: 1021
+          ToPort: 1023
+          CidrIp: !FindInMap [Networking, VPC, CIDR1]                  
+      Tags:
+      - Key: Name
+        Value: !Join [ '-', [ !Ref VPCName, 'SG', 'additional'] ]                                        
+
+
+  EFASecurityGroupIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+        Description: All to all communication for EFA Ingress within Security Group
+        GroupId: !Ref AdditionalSecurityGroup
+        IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt AdditionalSecurityGroup.GroupId
+
+  EFASecurityGroupEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      Description: All to all communication for EFA Egress within Security Group
+      IpProtocol: -1
+      FromPort: -1
+      ToPort: -1
+      GroupId: !Ref AdditionalSecurityGroup
+      DestinationSecurityGroupId: !Ref AdditionalSecurityGroup
+  
+  EFASecurityGroupEgressECS:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      Description: All to all communication for Egress to all
+      IpProtocol: -1
+      FromPort: -1
+      ToPort: -1
+      GroupId: !Ref AdditionalSecurityGroup
+      CidrIp: 0.0.0.0/0
+
+  SharedNodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow all internal communications
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: !FindInMap [Networking, VPC, CIDR0]
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: !FindInMap [Networking, VPC, CIDR1]
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'SG', 'shared-node'] ]                                        
+
+  SharedNodeSecurityGroupIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+        GroupId: !Ref SharedNodeSecurityGroup
+        IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt SharedNodeSecurityGroup.GroupId
+
+  CustomNetworkSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SecurityGroup for CNI Custom Network
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: !FindInMap [Networking, VPC, CIDR0]
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: !FindInMap [Networking, VPC, CIDR1]            
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'SG', 'custom-network'] ]                                        
+
+  CustomNetworkSecurityGroupIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+        GroupId: !Ref CustomNetworkSecurityGroup
+        IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt CustomNetworkSecurityGroup.GroupId
+
+  BenchSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Minimal rules for benchmark
+      VpcId: !Ref VPC
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+          Description: "Enable all outbound traffic"                                                                
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'SG', 'bench'] ]
+
+  ExternalSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow external ssh for public access
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0       
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIpv6: ::/0                
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 0.0.0.0/0
+        # - IpProtocol: tcp
+        #   FromPort: 8081
+        #   ToPort: 8081
+        #   CidrIp: 0.0.0.0/0          
+        - IpProtocol: tcp
+          FromPort: 7860
+          ToPort: 7860
+          CidrIp: 0.0.0.0/0   
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          CidrIp: 0.0.0.0/0   
+        - IpProtocol: tcp
+          FromPort: 7557
+          ToPort: 7557
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+          Description: "Enable all outbound traffic"                                                                
+      Tags:
+        - Key: Name
+          Value: !Join [ '-', [ !Ref VPCName, 'SG', 'external'] ]                                  
+
+  ExternalSecurityGroupIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+        GroupId: !Ref ExternalSecurityGroup
+        IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt ExternalSecurityGroup.GroupId
+
+  # Security Groups Mutual References
+  CustomNetwork2SharedNodeIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+        GroupId: !Ref SharedNodeSecurityGroup
+        IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt CustomNetworkSecurityGroup.GroupId
+
+  CustomNetwork2ControlPlaneIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+        GroupId: !Ref ControlPlaneSecurityGroup
+        IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt CustomNetworkSecurityGroup.GroupId
+
+  CustomNetwork2ExternalIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+        GroupId: !Ref ExternalSecurityGroup
+        IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt CustomNetworkSecurityGroup.GroupId
+
+  SharedNode2CustomNetworkIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+        GroupId: !Ref CustomNetworkSecurityGroup
+        IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt SharedNodeSecurityGroup.GroupId
+
+  SharedNode2ControlPlaneIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+        GroupId: !Ref ControlPlaneSecurityGroup
+        IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt SharedNodeSecurityGroup.GroupId
+
+  SharedNode2ExternalIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+        GroupId: !Ref ExternalSecurityGroup
+        IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt SharedNodeSecurityGroup.GroupId
+
+  ControlPlane2SharedNodeIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+        GroupId: !Ref SharedNodeSecurityGroup
+        IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt ControlPlaneSecurityGroup.GroupId
+
+  ControlPlane2CustomNetworkIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+        GroupId: !Ref CustomNetworkSecurityGroup
+        IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt ControlPlaneSecurityGroup.GroupId
+
+  ControlPlane2ExternalNetworkIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+        GroupId: !Ref ExternalSecurityGroup
+        IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt ControlPlaneSecurityGroup.GroupId
+
+  # S3 endpoint
+  S3Endpoint:
+    Condition: S3EndpointCondition
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+            - Effect: Allow
+              Principal: '*'
+              Action:
+                - '*'
+              Resource:
+                - '*'
+      RouteTableIds:
+        # - !If [PublicSubnetCondition, !Ref PublicRouteTable, !Ref AWS::NoValue]
+        - !Ref PublicRouteTable
+        - !Ref PrivateRouteTable
+        - !Ref PrivateRouteTable2
+        - !If [3AZCondition, !Ref PrivateRouteTable3, !Ref AWS::NoValue]
+        - !If [4AZCondition, !Ref PrivateRouteTable4, !Ref AWS::NoValue]
+        - !If [5AZCondition, !Ref PrivateRouteTable5, !Ref AWS::NoValue]
+        - !If [6AZCondition, !Ref PrivateRouteTable6, !Ref AWS::NoValue]
+
+      ServiceName: !Join
+        - ''
+        - - com.amazonaws.
+          - !Ref AWS::Region
+          - .s3
+      VpcId: !Ref VPC
+
+
+  # S3 Express endpoint
+  S3ExpressEndpoint:
+    Condition: S3ExpressEndpointCondition
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+            - Effect: Allow
+              Principal: '*'
+              Action:
+                - '*'
+              Resource:
+                - '*'
+      RouteTableIds:
+        - !Ref PublicRouteTable
+        - !Ref PrivateRouteTable
+        - !Ref PrivateRouteTable2
+        - !If [3AZCondition, !Ref PrivateRouteTable3, !Ref AWS::NoValue]
+        - !If [4AZCondition, !Ref PrivateRouteTable4, !Ref AWS::NoValue]
+        - !If [5AZCondition, !Ref PrivateRouteTable5, !Ref AWS::NoValue]
+        - !If [6AZCondition, !Ref PrivateRouteTable6, !Ref AWS::NoValue]
+      ServiceName: !Join
+        - ''
+        - - com.amazonaws.
+          - !Ref AWS::Region
+          - .s3express
+      VpcId: !Ref VPC
+
+
+  # DynamoDB endpoint
+  DynamoDBEndpoint:
+    Condition: DynamoDBEndpointCondition
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+            - Effect: Allow
+              Principal: '*'
+              Action:
+                - '*'
+              Resource:
+                - '*'
+      RouteTableIds:
+        - !Ref PublicRouteTable
+        - !Ref PrivateRouteTable
+        - !Ref PrivateRouteTable2
+        - !If [3AZCondition, !Ref PrivateRouteTable3, !Ref AWS::NoValue]
+        - !If [4AZCondition, !Ref PrivateRouteTable4, !Ref AWS::NoValue]
+        - !If [5AZCondition, !Ref PrivateRouteTable5, !Ref AWS::NoValue]
+        - !If [6AZCondition, !Ref PrivateRouteTable6, !Ref AWS::NoValue]
+      ServiceName: !Join
+        - ''
+        - - com.amazonaws.
+          - !Ref AWS::Region
+          - .dynamodb
+      VpcId: !Ref VPC
+
+
+#############
+## Outputs ##
+#############
+Outputs:
+  VpcId:
+    Value: !Ref VPC
+    Description: ID of the VPC
+    Export:
+      Name: !Sub ${AWS::StackName}-VPC
+  PublicSubnet:
+    Value: !Join
+      - ','
+      - - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+        - !If [3AZConditionPublic, !Ref PublicSubnet3, !Ref AWS::NoValue]
+        - !If [4AZConditionPublic, !Ref PublicSubnet4, !Ref AWS::NoValue]
+        - !If [5AZConditionPublic, !Ref PublicSubnet5, !Ref AWS::NoValue]
+        - !If [6AZConditionPublic, !Ref PublicSubnet6, !Ref AWS::NoValue]
+    Description: ID of the public subnet
+    Export:
+      Name: !Sub ${AWS::StackName}-PublicSubnet
+ 
+  PrivateSubnets:
+    Value: !Join
+      - ','
+      - - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+        - !If [3AZCondition, !Ref PrivateSubnet3, !Ref AWS::NoValue]
+        - !If [4AZCondition, !Ref PrivateSubnet4, !Ref AWS::NoValue]
+        - !If [5AZCondition, !Ref PrivateSubnet5, !Ref AWS::NoValue]
+        - !If [6AZCondition, !Ref PrivateSubnet6, !Ref AWS::NoValue]
+    Description: ID of the private subnets
+    Export:
+      Name: !Sub ${AWS::StackName}-PrivateSubnets
+
+  PodSubnets:
+    Value: !Join
+      - ','
+      - - !Ref PodSubnet1
+        - !Ref PodSubnet2
+        - !If [3AZCondition, !Ref PodSubnet3, !Ref AWS::NoValue]
+        - !If [4AZCondition, !Ref PodSubnet4, !Ref AWS::NoValue]
+        - !If [5AZCondition, !Ref PodSubnet5, !Ref AWS::NoValue]
+        - !If [6AZCondition, !Ref PodSubnet6, !Ref AWS::NoValue]
+    Description: ID of the pod subnets
+    Export:
+      Name: !Sub ${AWS::StackName}-PodSubnets
+
+
+  ControlPlaneSecurityGroup:
+    Description: Security group for the cluster control plane communication with worker nodes
+    Value: !Join [ ",", [ !Ref ControlPlaneSecurityGroup ] ]
+    Export:
+      Name: !Sub ${AWS::StackName}-ControlPlaneSecurityGroup
+
+  SharedNodeSecurityGroup:
+    Description: Security group for the Shared Nodes
+    Value: !Join [ ",", [ !Ref SharedNodeSecurityGroup ] ]
+    Export:
+      Name: !Sub ${AWS::StackName}-SharedNodeSecurityGroup
+
+  CustomNetworkSecurityGroup:
+    Description: Security group for the Custom Network
+    Value: !Join [ ",", [ !Ref CustomNetworkSecurityGroup ] ]
+    Export:
+      Name: !Sub ${AWS::StackName}-CustomNetworkSecurityGroup
+
+  AdditionalSecurityGroup:
+    Description: Security group for additional resources
+    Value: !Join [ ",", [ !Ref AdditionalSecurityGroup ] ]      
+    Export:
+      Name: !Sub ${AWS::StackName}-AdditionalSecurityGroup    
+
+  ExternalSecurityGroup:
+    Description: Security group for Pod to access external resources
+    Value: !Join [ ",", [ !Ref ExternalSecurityGroup ] ]      
+    Export:
+      Name: !Sub ${AWS::StackName}-ExternalSecurityGroup    

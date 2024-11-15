@@ -1,0 +1,2024 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Reinforced VPC with dual stack (IPv4 + IPv6)'
+
+Parameters:
+  VpcBlockMain:
+    Type: String
+    Default: 192.168.0.0/16
+    Description: The CIDR range for the VPC. This should be a valid private (RFC 1918) CIDR range.
+    AllowedPattern: '^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$'
+
+  VpcBlockEKS:
+    Type: String
+    Default: 100.66.0.0/16
+    Description: The CIDR range for the EKS. This should be a valid private (RFC 1918) CIDR range.
+    AllowedPattern: '^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([0-9]|[1-2][0-9]|3[0-2]))$'
+
+  ELBEgSubnet01Block:
+    Type: String
+    Default: 192.168.0.0/26
+    Description: CidrBlock for Public ELB subnet 01 within the VPC
+
+  ELBEgSubnet02Block:
+    Type: String
+    Default: 192.168.0.64/26
+    Description: CidrBlock for Public ELB subnet 02 within the VPC
+
+  ELBEgSubnet03Block:
+    Type: String
+    Default: 192.168.0.128/26
+    Description: CidrBlock for Public ELB subnet 03 within the VPC
+
+  NATEgSubnet01Block:
+    Type: String
+    Default: 192.168.2.0/26
+    Description: CidrBlock for Public NAT Gateway subnet 01 within the VPC
+
+  NATEgSubnet02Block:
+    Type: String
+    Default: 192.168.2.64/26
+    Description: CidrBlock for Public NAT Gateway subnet 02 within the VPC
+
+  NATEgSubnet03Block:
+    Type: String
+    Default: 192.168.2.128/26
+    Description: CidrBlock for Public NAT Gateway subnet 03 within the VPC
+
+  NATInSubnet01Block:
+    Type: String
+    Default: 192.168.3.0/27
+    Description: CidrBlock for Internal NAT Gateway subnet 01 within the VPC
+
+  NATInSubnet02Block:
+    Type: String
+    Default: 192.168.3.32/27
+    Description: CidrBlock for Internal NAT Gateway subnet 02 within the VPC
+
+  NATInSubnet03Block:
+    Type: String
+    Default: 192.168.3.64/27
+    Description: CidrBlock for Internal NAT Gateway subnet 03 within the VPC
+
+  NFWEgSubnet01Block:
+    Type: String
+    Description: Cidr Block for Network Firewall Egress subnet 01
+    Default: 192.168.4.0/28
+
+  NFWEgSubnet02Block:
+    Type: String
+    Description: Cidr Block for Network Firewall Egress subnet 02
+    Default: 192.168.4.16/28
+
+  NFWEgSubnet03Block:
+    Type: String
+    Description: Cidr Block for Network Firewall Egress subnet 03
+    Default: 192.168.4.32/28
+
+  NFWInSubnet01Block:
+    Type: String
+    Description: Cidr Block for Network Firewall Ingress subnet 01
+    Default: 192.168.4.48/28
+
+  NFWInSubnet02Block:
+    Type: String
+    Description: Cidr Block for Network Firewall Ingress subnet 02
+    Default: 192.168.4.64/28
+
+  NFWInSubnet03Block:
+    Type: String
+    Description: Cidr Block for Network Firewall Ingress subnet 03
+    Default: 192.168.4.80/28
+
+  TGWSubnet01Block:
+    Type: String
+    Description: Cidr Block for TGW subnet 01
+    Default: 192.168.5.0/28
+
+  TGWSubnet02Block:
+    Type: String
+    Description: Cidr Block for TGW subnet 02
+    Default: 192.168.5.16/28
+
+  TGWSubnet03Block:
+    Type: String
+    Description: Cidr Block for TGW subnet 03
+    Default: 192.168.5.32/28
+
+  CNESubnet01Block:
+    Type: String
+    Description: Cidr Block for CNE subnet 01
+    Default: 192.168.6.0/28
+
+  CNESubnet02Block:
+    Type: String
+    Description: Cidr Block for CNE subnet 02
+    Default: 192.168.6.16/28
+
+  CNESubnet03Block:
+    Type: String
+    Description: Cidr Block for CNE subnet 03
+    Default: 192.168.6.32/28
+
+  PrivateSubnet01Block:
+    Type: String
+    Default: 192.168.192.0/22
+    Description: CidrBlock for private subnet 01 within the VPC
+
+  PrivateSubnet02Block:
+    Type: String
+    Default: 192.168.196.0/22
+    Description: CidrBlock for private subnet 02 within the VPC
+
+  PrivateSubnet03Block:
+    Type: String
+    Default: 192.168.200.0/22
+    Description: CidrBlock for private subnet 03 within the VPC
+
+  PodSubnet01Block:
+    Type: String
+    Default: 100.66.0.0/19
+    Description: CidrBlock for EKS Pod subnet 01 within the VPC
+
+  PodSubnet02Block:
+    Type: String
+    Default: 100.66.32.0/19
+    Description: CidrBlock for EKS Pod subnet 02 within the VPC
+
+  PodSubnet03Block:
+    Type: String
+    Default: 100.66.64.0/19
+    Description: CidrBlock for EKS Pod subnet 03 within the VPC
+
+  NamePrefix:
+    Type: String
+    Default: sage
+    Description: Resource name prefix for all
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: "Infra Configuration"
+        Parameters:
+          - NamePrefix
+          - VpcBlockMain
+          - VpcBlockEKS
+          - PrivateSubnet01Block
+          - PrivateSubnet02Block
+          - PrivateSubnet03Block
+          - PodSubnet01Block
+          - PodSubnet02Block
+          - PodSubnet03Block
+          - ELBEgSubnet01Block
+          - ELBEgSubnet02Block
+          - ELBEgSubnet03Block       
+          - NATEgSubnet01Block
+          - NATEgSubnet02Block
+          - NATEgSubnet03Block
+          - NATInSubnet01Block
+          - NATInSubnet02Block
+          - NATInSubnet03Block         
+          - NFWEgSubnet01Block
+          - NFWEgSubnet02Block
+          - NFWEgSubnet03Block
+          - NFWInSubnet01Block
+          - NFWInSubnet02Block
+          - NFWInSubnet03Block          
+          - TGWSubnet01Block
+          - TGWSubnet02Block
+          - TGWSubnet03Block
+          - CNESubnet01Block
+          - CNESubnet02Block
+          - CNESubnet03Block
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcBlockMain
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+      - Key: Name
+        Value: !Sub '${NamePrefix}-VPC'
+
+  VpcCidrBlock:
+    DependsOn: VPC
+    Type: AWS::EC2::VPCCidrBlock
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref VpcBlockEKS
+
+  IPv6CidrBlock:
+    Type: 'AWS::EC2::VPCCidrBlock'
+    Properties:
+      AmazonProvidedIpv6CidrBlock: true
+      VpcId: !Ref VPC
+
+  ##########################
+  # ELB subnets  #
+  ##########################
+  ELBEgSubnet01:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      Comment: Public ELB Subnet 01
+    DependsOn:
+      - IPv6CidrBlock      
+    Properties:
+      MapPublicIpOnLaunch: true
+      AssignIpv6AddressOnCreation: true
+      AvailabilityZone:
+        Fn::Select:
+        - '0'
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      CidrBlock:
+        Ref: ELBEgSubnet01Block
+      Ipv6CidrBlock:  
+        !Select [0, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]        
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: !Sub "${NamePrefix}-PublicELBSubnet01"
+      - Key: kubernetes.io/role/elb
+        Value: 1
+
+  ELBEgSubnet02:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      Comment: Public ELB Subnet 02
+    DependsOn:
+      - IPv6CidrBlock      
+    Properties:
+      MapPublicIpOnLaunch: true
+      AssignIpv6AddressOnCreation: true
+      AvailabilityZone:
+        Fn::Select:
+        - '1'
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      CidrBlock:
+        Ref: ELBEgSubnet02Block
+      Ipv6CidrBlock:  
+        !Select [1, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]        
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: !Sub "${NamePrefix}-PublicELBSubnet02"
+      - Key: kubernetes.io/role/elb
+        Value: 1
+
+  ELBEgSubnet03:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      Comment: Public ELB Subnet 03
+    DependsOn:
+      - IPv6CidrBlock
+    Properties:
+      MapPublicIpOnLaunch: true
+      AssignIpv6AddressOnCreation: true
+      AvailabilityZone:
+        Fn::Select:
+        - '2'
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      CidrBlock:
+        Ref: ELBEgSubnet03Block
+      Ipv6CidrBlock:  
+        !Select [2, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]        
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: !Sub "${NamePrefix}-PublicELBSubnet03"
+      - Key: kubernetes.io/role/elb
+        Value: 1
+
+
+  ##########################
+  # NAT subnets #
+  ##########################
+  NATEgSubnet01:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      Comment: External NAT Subnet 01
+    DependsOn:
+      - IPv6CidrBlock      
+    Properties:
+      MapPublicIpOnLaunch: true
+      AssignIpv6AddressOnCreation: true
+      AvailabilityZone:
+        Fn::Select:
+        - '0'
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      CidrBlock:
+        Ref: NATEgSubnet01Block
+      Ipv6CidrBlock:  
+        !Select [3, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]        
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: !Sub "${NamePrefix}-ExternalNATSubnet01"
+
+  NATEgSubnet02:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      Comment: External NAT Subnet 02
+    DependsOn:
+      - IPv6CidrBlock      
+    Properties:
+      MapPublicIpOnLaunch: true
+      AssignIpv6AddressOnCreation: true
+      AvailabilityZone:
+        Fn::Select:
+        - '1'
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      CidrBlock:
+        Ref: NATEgSubnet02Block
+      Ipv6CidrBlock:  
+        !Select [4, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]        
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: !Sub "${NamePrefix}-ExternalNATSubnet02"
+
+  NATEgSubnet03:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      Comment: External NAT Subnet 03
+    DependsOn:
+      - IPv6CidrBlock      
+    Properties:
+      MapPublicIpOnLaunch: true
+      AssignIpv6AddressOnCreation: true
+      AvailabilityZone:
+        Fn::Select:
+        - '2'
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      CidrBlock:
+        Ref: NATEgSubnet03Block
+      Ipv6CidrBlock:  
+        !Select [5, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]        
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: !Sub "${NamePrefix}-ExternalNATSubnet03"
+
+  NATInSubnet01:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      Comment: Internal NAT Subnet 01
+    DependsOn:
+      - IPv6CidrBlock      
+    Properties:
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+        - '0'
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      CidrBlock:
+        Ref: NATInSubnet01Block
+      Ipv6CidrBlock:  
+        !Select [6, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]           
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: !Sub "${NamePrefix}-InternalNATSubnet01"
+
+  NATInSubnet02:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      Comment: Internal NAT Subnet 02
+    DependsOn:
+      - IPv6CidrBlock          
+    Properties:
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+        - '1'
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      CidrBlock:
+        Ref: NATInSubnet02Block
+      Ipv6CidrBlock:  
+        !Select [7, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]         
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: !Sub "${NamePrefix}-InternalNATSubnet02"
+
+  NATInSubnet03:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      Comment: Internal NAT Subnet 03
+    DependsOn:
+      - IPv6CidrBlock          
+    Properties:
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+        - '2'
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      CidrBlock:
+        Ref: NATInSubnet03Block
+      Ipv6CidrBlock:  
+        !Select [8, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]           
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: !Sub "${NamePrefix}-InternalNATSubnet03"
+
+  
+  ##########################
+  # NFW subnets  #
+  ##########################
+  NFWEgSubnet01:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      Comment: Egress NFW Subnet 01    
+    DependsOn:
+      - IPv6CidrBlock         
+    Properties:
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+        - '0'
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      CidrBlock:
+        Ref: NFWEgSubnet01Block 
+      Ipv6CidrBlock:  
+        !Select [9, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]            
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: !Sub "${NamePrefix}-NFWSubnetEgress01"
+
+  NFWEgSubnet02:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      Comment: Egress NFW Subnet 02
+    DependsOn:
+      - IPv6CidrBlock         
+    Properties:
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+        - '1'
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      CidrBlock:
+        Ref: NFWEgSubnet02Block
+      Ipv6CidrBlock:  
+        !Select [10, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]                 
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: !Sub "${NamePrefix}-NFWSubnetEgress02"
+
+  NFWEgSubnet03:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      Comment: Egress NFW Subnet 03
+    DependsOn:
+      - IPv6CidrBlock         
+    Properties:
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+        - '2'
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      CidrBlock:
+        Ref: NFWEgSubnet03Block
+      Ipv6CidrBlock:  
+        !Select [11, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]            
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: !Sub "${NamePrefix}-NFWSubnetEgress03"        
+
+  NFWInSubnet01:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      Comment: Ingress NFW Subnet 01    
+    DependsOn:
+      - IPv6CidrBlock       
+    Properties:
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+        - '0'
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      CidrBlock:
+        Ref: NFWInSubnet01Block
+      Ipv6CidrBlock:  
+        !Select [12, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]               
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: !Sub "${NamePrefix}-NFWSubnetIngress01"
+  
+  NFWInSubnet02:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      Comment: Ingress NFW Subnet 02
+    DependsOn:
+      - IPv6CidrBlock         
+    Properties:
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+        - '1'
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      CidrBlock:
+        Ref: NFWInSubnet02Block
+      Ipv6CidrBlock:  
+        !Select [13, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]                 
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: !Sub "${NamePrefix}-NFWSubnetIngress02"
+
+  NFWInSubnet03:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      Comment: Ingress NFW Subnet 03
+    DependsOn:
+      - IPv6CidrBlock         
+    Properties:
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+        - '2'
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      CidrBlock:
+        Ref: NFWInSubnet03Block
+      Ipv6CidrBlock:  
+        !Select [14, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]            
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: !Sub "${NamePrefix}-NFWSubnetIngress03"
+
+
+  ##########################
+  # TGW subnets  #
+  ##########################
+  TGWSubnet01:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      Comment: TGW Subnet 01
+    DependsOn:
+      - IPv6CidrBlock          
+    Properties:
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+        - '0'
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      CidrBlock:
+        Ref: TGWSubnet01Block
+      Ipv6CidrBlock:  
+        !Select [15, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]            
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: !Sub "${NamePrefix}-TGWSubnet01"
+
+  TGWSubnet02:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      Comment: TGW Subnet 02
+    DependsOn:
+      - IPv6CidrBlock      
+    Properties:
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+        - '1'
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      CidrBlock:
+        Ref: TGWSubnet02Block
+      Ipv6CidrBlock:  
+        !Select [16, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]            
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: !Sub "${NamePrefix}-TGWSubnet02"
+
+  TGWSubnet03:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      Comment: TGW Subnet 03
+    DependsOn:
+      - IPv6CidrBlock          
+    Properties:
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+        - '2'
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      CidrBlock:
+        Ref: TGWSubnet03Block
+      Ipv6CidrBlock:  
+        !Select [17, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]              
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: !Sub "${NamePrefix}-TGWSubnet03"
+
+
+  ##########################
+  # CNE subnets  #
+  ##########################
+  CNESubnet01:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      Comment: CNE Subnet 01 
+    DependsOn:
+      - IPv6CidrBlock      
+    Properties:
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+        - '0'
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      CidrBlock:
+        Ref: CNESubnet01Block
+      Ipv6CidrBlock:  
+        !Select [18, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]         
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: !Sub "${NamePrefix}-CNESubnet01"
+
+  CNESubnet02:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      Comment: CNE Subnet 02
+    DependsOn:
+      - IPv6CidrBlock          
+    Properties:
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+        - '1'
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      CidrBlock:
+        Ref: CNESubnet02Block
+      Ipv6CidrBlock:  
+        !Select [19, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]            
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: !Sub "${NamePrefix}-CNESubnet02"  
+  
+  CNESubnet03:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      Comment: CNE Subnet 03
+    DependsOn:
+      - IPv6CidrBlock          
+    Properties:
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+        - '2'
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      CidrBlock:
+        Ref: CNESubnet03Block 
+      Ipv6CidrBlock:  
+        !Select [20, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]              
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: !Sub "${NamePrefix}-CNESubnet03"  
+
+
+  ##########################
+  # Private subnets #
+  ##########################
+  PrivateSubnet01:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      Comment: Private Subnet 01
+    DependsOn:
+      - IPv6CidrBlock            
+    Properties:
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+        - '0'
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      CidrBlock:
+        Ref: PrivateSubnet01Block
+      Ipv6CidrBlock:  
+        !Select [21, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]          
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: !Sub "${NamePrefix}-PrivateSubnet01"
+      - Key: kubernetes.io/role/internal-elb
+        Value: 1
+
+  PrivateSubnet02:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      Comment: Private Subnet 02   
+    DependsOn:
+      - IPv6CidrBlock            
+    Properties:
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+        - '1'
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      CidrBlock:
+        Ref: PrivateSubnet02Block
+      Ipv6CidrBlock:  
+        !Select [22, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]            
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: !Sub "${NamePrefix}-PrivateSubnet02"
+      - Key: kubernetes.io/role/internal-elb
+        Value: 1
+
+  PrivateSubnet03:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      Comment: Private Subnet 03
+    DependsOn:
+      - IPv6CidrBlock           
+    Properties:
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+        - '2'
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      CidrBlock:
+        Ref: PrivateSubnet03Block
+      Ipv6CidrBlock:  
+        !Select [23, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]            
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: !Sub "${NamePrefix}-PrivateSubnet03"
+      - Key: kubernetes.io/role/internal-elb
+        Value: 1
+
+
+
+  ##########################
+  # Pod subnets #
+  ##########################
+  PodSubnet01:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      Comment: Pod Subnet 01
+    DependsOn:
+      - IPv6CidrBlock        
+    Properties:
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+        - '0'
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      CidrBlock:
+        Ref: PodSubnet01Block
+      Ipv6CidrBlock:  
+        !Select [24, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]          
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: !Sub "${NamePrefix}-PodSubnet01"
+
+  PodSubnet02:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      Comment: Pod Subnet 02
+    DependsOn:
+      - IPv6CidrBlock         
+    Properties:
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+        - '1'
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      CidrBlock:
+        Ref: PodSubnet02Block
+      Ipv6CidrBlock:  
+        !Select [25, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]             
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: !Sub "${NamePrefix}-PodSubnet02"
+
+  PodSubnet03:
+    Type: AWS::EC2::Subnet
+    Metadata:
+      Comment: Pod Subnet 03 
+    DependsOn:
+      - IPv6CidrBlock        
+    Properties:
+      MapPublicIpOnLaunch: false
+      AvailabilityZone:
+        Fn::Select:
+        - '2'
+        - Fn::GetAZs:
+            Ref: AWS::Region
+      CidrBlock:
+        Ref: PodSubnet03Block
+      Ipv6CidrBlock:  
+        !Select [26, !Cidr [!Select [0, !GetAtt VPC.Ipv6CidrBlocks], 30, 64]]             
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: !Sub "${NamePrefix}-PodSubnet03"
+
+
+
+  #######################
+  # Gateways     #
+  #######################
+  InternetGateway:
+    Type: "AWS::EC2::InternetGateway"
+
+  EgressOnlyInternetGateway:
+    Type: 'AWS::EC2::EgressOnlyInternetGateway'
+    Properties:
+      VpcId: !Ref VPC
+
+  VPCGatewayAttachment:
+    Type: "AWS::EC2::VPCGatewayAttachment"
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+  NatGatewayEIP1:
+    DependsOn:
+    - VPCGatewayAttachment
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      Domain: vpc
+
+  NatGatewayEIP2:
+    DependsOn:
+    - VPCGatewayAttachment
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      Domain: vpc
+
+  NatGatewayEIP3:
+    DependsOn:
+    - VPCGatewayAttachment
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      Domain: vpc
+
+  NatGatewayEg01:
+    DependsOn:
+    - VPCGatewayAttachment
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt 'NatGatewayEIP1.AllocationId'
+      SubnetId: !Ref NATEgSubnet01
+      Tags:
+      - Key: Name
+        Value: !Sub '${NamePrefix}-ExternalNatGatewayAZ1'
+
+  NatGatewayEg02:
+    DependsOn:
+    - VPCGatewayAttachment
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt 'NatGatewayEIP2.AllocationId'
+      SubnetId: !Ref NATEgSubnet02
+      Tags:
+      - Key: Name
+        Value: !Sub '${NamePrefix}-ExternalNatGatewayAZ2'
+
+  NatGatewayEg03:
+    DependsOn:
+    - VPCGatewayAttachment
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt 'NatGatewayEIP3.AllocationId'
+      SubnetId: !Ref NATEgSubnet03
+      Tags:
+      - Key: Name
+        Value: !Sub '${NamePrefix}-ExternalNatGatewayAZ3'
+
+  NatGatewayIn01:
+    DependsOn:
+    - VPCGatewayAttachment
+    Type: AWS::EC2::NatGateway
+    Properties:
+      ConnectivityType: private
+      SubnetId: !Ref NATInSubnet01
+      Tags:
+      - Key: Name
+        Value: !Sub '${NamePrefix}-InternalNatGatewayAZ1'
+
+  NatGatewayIn02:
+    DependsOn:
+    - VPCGatewayAttachment
+    Type: AWS::EC2::NatGateway
+    Properties:
+      ConnectivityType: private
+      SubnetId: !Ref NATInSubnet02
+      Tags:
+      - Key: Name
+        Value: !Sub '${NamePrefix}-InternalNatGatewayAZ2'
+
+  NatGatewayIn03:
+    DependsOn:
+    - VPCGatewayAttachment
+    Type: AWS::EC2::NatGateway
+    Properties:
+      ConnectivityType: private
+      SubnetId: !Ref NATInSubnet03
+      Tags:
+      - Key: Name
+        Value: !Sub '${NamePrefix}-InternalNatGatewayAZ3'        
+
+
+  ##########################
+  # Route tables    #
+  ##########################
+  ELBEgRouteTable01:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: Public ELB Subnet AZ1
+      - Key: Network
+        Value: PublicELB01
+
+  ELBEgRouteTable02:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: Public ELB Subnet AZ2
+      - Key: Network
+        Value: PublicELB02
+
+  ELBEgRouteTable03:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: Public ELB Subnet AZ3
+      - Key: Network
+        Value: PublicELB03
+
+  NATEgRouteTable01:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: External NAT Subnet AZ1
+      - Key: Network
+        Value: ExternalNAT01
+
+  NATEgRouteTable02:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: External NAT Subnet AZ2
+      - Key: Network
+        Value: ExternalNAT02
+
+  NATEgRouteTable03:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: External NAT Subnet AZ3
+      - Key: Network
+        Value: ExternalNAT03
+
+  NATInRouteTable01:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: Internal NAT Subnet AZ1
+      - Key: Network
+        Value: InternalNAT01
+
+  NATInRouteTable02:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: Internal NAT Subnet AZ2
+      - Key: Network
+        Value: InternalNAT02
+
+  NATInRouteTable03:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: Internal NAT Subnet AZ3
+      - Key: Network
+        Value: InternalNAT03
+
+  NFWEgRouteTable01:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: NFW Subnet Egress AZ1
+      - Key: Network
+        Value: NFWEg01
+
+  NFWEgRouteTable02:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: NFW Subnet Egress AZ2
+      - Key: Network
+        Value: NFWEg02
+
+  NFWEgRouteTable03:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: NFW Subnet Egress AZ3
+      - Key: Network
+        Value: NFWEg03
+
+  NFWInRouteTable01:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: NFW Subnet Ingress AZ1
+      - Key: Network
+        Value: NFWIn01
+
+  NFWInRouteTable02:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: NFW Subnet Ingress AZ2
+      - Key: Network
+        Value: NFWIn02
+
+  NFWInRouteTable03:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: NFW Subnet Ingress AZ3
+      - Key: Network
+        Value: NFWIn03
+
+  EdgeRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: Edge Ingress
+      - Key: Network
+        Value: Edge
+
+  TGWRouteTable01:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: TGW Subnet AZ1
+      - Key: Network
+        Value: TGW01
+
+  TGWRouteTable02:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: TGW Subnet AZ2
+      - Key: Network
+        Value: TGW02
+
+  TGWRouteTable03:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: TGW Subnet AZ3
+      - Key: Network
+        Value: TGW03
+
+  CNERouteTable01:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: CNE Subnet AZ1
+      - Key: Network
+        Value: CNE01
+
+  CNERouteTable02:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: CNE Subnet AZ2
+      - Key: Network
+        Value: CNE02
+
+  CNERouteTable03:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: CNE Subnet AZ3
+      - Key: Network
+        Value: CNE03
+
+  PrivateRouteTable01:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: Private Subnet AZ1
+      - Key: Network
+        Value: Private01
+
+  PrivateRouteTable02:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: Private Subnet AZ2
+      - Key: Network
+        Value: Private02
+
+  PrivateRouteTable03:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: Private Subnet AZ3
+      - Key: Network
+        Value: Private03
+
+  PodRouteTable01:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: Pod Subnet AZ1
+      - Key: Network
+        Value: Pod01
+
+  PodRouteTable02:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: Pod Subnet AZ2
+      - Key: Network
+        Value: Pod02
+
+  PodRouteTable03:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: Pod Subnet AZ3
+      - Key: Network
+        Value: Pod03
+
+
+  #####################################################
+  # Associate Gateways and IPv4 destination to route  #
+  #####################################################
+  ELBEgRoute01:
+    DependsOn: VPCGatewayAttachment
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref ELBEgRouteTable01
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  ELBEgRoute02:
+    DependsOn: VPCGatewayAttachment
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref ELBEgRouteTable02
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  ELBEgRoute03:
+    DependsOn: VPCGatewayAttachment
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref ELBEgRouteTable03
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  NATEgRoute01:
+    DependsOn: VPCGatewayAttachment
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref NATEgRouteTable01
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  NATEgRoute02:
+    DependsOn: VPCGatewayAttachment
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref NATEgRouteTable02
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  NATEgRoute03:
+    DependsOn: VPCGatewayAttachment
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref NATEgRouteTable03
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  NFWEgRoute01:
+    DependsOn: VPCGatewayAttachment
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref NFWEgRouteTable01
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  NFWEgRoute02:
+    DependsOn: VPCGatewayAttachment
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref NFWEgRouteTable02
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  NFWEgRoute03:
+    DependsOn: VPCGatewayAttachment
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref NFWEgRouteTable03
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  NFWInRoute01:
+    DependsOn: VPCGatewayAttachment
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref NFWInRouteTable01
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayEg01
+
+  NFWInRoute02:
+    DependsOn: VPCGatewayAttachment
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref NFWInRouteTable02
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayEg02
+
+  NFWInRoute03:
+    DependsOn: VPCGatewayAttachment
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref NFWInRouteTable03
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayEg03
+
+  EdgeRouteTableAssociation:
+    Type: AWS::EC2::GatewayRouteTableAssociation
+    Properties: 
+      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref EdgeRouteTable
+
+  PrivateRoute01:
+    DependsOn:
+    - VPCGatewayAttachment
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable01
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayEg01
+
+  PrivateRoute02:
+    DependsOn:
+    - VPCGatewayAttachment
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable02
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayEg02
+
+  PrivateRoute03:
+    DependsOn:
+    - VPCGatewayAttachment
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable03
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayEg03
+
+  PodRoute01:
+    DependsOn:
+    - VPCGatewayAttachment
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PodRouteTable01
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayEg01
+
+  PodRoute02:
+    DependsOn:
+    - VPCGatewayAttachment
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PodRouteTable02
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayEg02
+
+  PodRoute03:
+    DependsOn:
+    - VPCGatewayAttachment
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PodRouteTable03
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGatewayEg03
+
+
+  #####################################################
+  # Associate Gateways and IPv6 destination to route  #
+  #####################################################
+  IPv6ELBEgRoute01:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref ELBEgRouteTable01
+      DestinationIpv6CidrBlock: "::/0"
+      GatewayId: !Ref InternetGateway
+
+  IPv6ELBEgRoute02:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref ELBEgRouteTable02
+      DestinationIpv6CidrBlock: "::/0"
+      GatewayId: !Ref InternetGateway
+
+  IPv6ELBEgRoute03:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref ELBEgRouteTable03
+      DestinationIpv6CidrBlock: "::/0"
+      GatewayId: !Ref InternetGateway
+
+  IPv6NATEgRoute01:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref NATEgRouteTable01
+      DestinationIpv6CidrBlock: "::/0"
+      GatewayId: !Ref InternetGateway
+
+  IPv6NATEgRoute02:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref NATEgRouteTable02
+      DestinationIpv6CidrBlock: "::/0"
+      GatewayId: !Ref InternetGateway
+
+  IPv6NATEgRoute03:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref NATEgRouteTable03
+      DestinationIpv6CidrBlock: "::/0"
+      GatewayId: !Ref InternetGateway
+
+  IPv6PrivateRoute01:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable01
+      DestinationIpv6CidrBlock: '::/0'
+      EgressOnlyInternetGatewayId: !Ref EgressOnlyInternetGateway      
+      # NatGatewayId: !Ref NatGateway01
+
+  IPv6PrivateRoute02:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable02
+      DestinationIpv6CidrBlock: "::/0"
+      EgressOnlyInternetGatewayId: !Ref EgressOnlyInternetGateway
+      # NatGatewayId: !Ref NatGateway02
+
+  IPv6PrivateRoute03:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable03
+      DestinationIpv6CidrBlock: "::/0"
+      EgressOnlyInternetGatewayId: !Ref EgressOnlyInternetGateway
+      # NatGatewayId: !Ref NatGateway03
+
+  IPv6NFWEgRoute01:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref NFWEgRouteTable01
+      DestinationIpv6CidrBlock: "::/0"
+      GatewayId: !Ref InternetGateway
+
+  IPv6NFWEgRoute02:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref NFWEgRouteTable02
+      DestinationIpv6CidrBlock: "::/0"
+      GatewayId: !Ref InternetGateway
+
+  IPv6NFWEgRoute03:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref NFWEgRouteTable03
+      DestinationIpv6CidrBlock: "::/0"
+      GatewayId: !Ref InternetGateway
+
+
+
+  #######################################################
+  # Associate subnets and route table     #
+  #######################################################
+  ELBEgSubnet01RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref ELBEgSubnet01
+      RouteTableId: !Ref ELBEgRouteTable01
+
+  ELBEgSubnet02RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref ELBEgSubnet02
+      RouteTableId: !Ref ELBEgRouteTable02
+
+  ELBEgSubnet03RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref ELBEgSubnet03
+      RouteTableId: !Ref ELBEgRouteTable03
+
+  NATEgSubnet01RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref NATEgSubnet01
+      RouteTableId: !Ref NATEgRouteTable01
+
+  NATEgSubnet02RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref NATEgSubnet02
+      RouteTableId: !Ref NATEgRouteTable02
+
+  NATEgSubnet03RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref NATEgSubnet03
+      RouteTableId: !Ref NATEgRouteTable03
+
+  NATInSubnet01RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref NATInSubnet01
+      RouteTableId: !Ref NATInRouteTable01
+
+  NATInSubnet02RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref NATInSubnet02
+      RouteTableId: !Ref NATInRouteTable02
+
+  NATInSubnet03RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref NATInSubnet03
+      RouteTableId: !Ref NATInRouteTable03  
+
+  NFWEgSubnet01RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref NFWEgSubnet01
+      RouteTableId: !Ref NFWEgRouteTable01
+
+  NFWEgSubnet02RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref NFWEgSubnet02
+      RouteTableId: !Ref NFWEgRouteTable02
+
+  NFWEgSubnet03RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref NFWEgSubnet03
+      RouteTableId: !Ref NFWEgRouteTable03
+
+  NFWInSubnet01RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref NFWInSubnet01
+      RouteTableId: !Ref NFWInRouteTable01
+
+  NFWInSubnet02RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref NFWInSubnet02
+      RouteTableId: !Ref NFWInRouteTable02
+
+  NFWInSubnet03RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref NFWInSubnet03
+      RouteTableId: !Ref NFWInRouteTable03
+
+  TGWSubnet01RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref TGWSubnet01
+      RouteTableId: !Ref TGWRouteTable01
+
+  TGWSubnet02RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref TGWSubnet02
+      RouteTableId: !Ref TGWRouteTable02
+
+  TGWSubnet03RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref TGWSubnet03
+      RouteTableId: !Ref TGWRouteTable03
+
+  CNESubnet01RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref CNESubnet01
+      RouteTableId: !Ref CNERouteTable01
+
+  CNESubnet02RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref CNESubnet02
+      RouteTableId: !Ref CNERouteTable02
+
+  CNESubnet03RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref CNESubnet03
+      RouteTableId: !Ref CNERouteTable03
+
+  PrivateSubnet01RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet01
+      RouteTableId: !Ref PrivateRouteTable01
+
+  PrivateSubnet02RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet02
+      RouteTableId: !Ref PrivateRouteTable02
+
+  PrivateSubnet03RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet03
+      RouteTableId: !Ref PrivateRouteTable03
+
+  PodSubnet01RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PodSubnet01
+      RouteTableId: !Ref PodRouteTable01
+
+  PodSubnet02RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PodSubnet02
+      RouteTableId: !Ref PodRouteTable02
+
+  PodSubnet03RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PodSubnet03
+      RouteTableId: !Ref PodRouteTable03
+
+  #######################################################
+  # Security Groups     #
+  #######################################################
+  ControlPlaneSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Cluster communication with worker nodes
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: !Ref VpcBlockMain
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: !Ref VpcBlockEKS      
+      Tags:
+      - Key: Name
+        Value: !Sub "${NamePrefix}-control-plane"
+
+  ControlPlaneSecurityGroupIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+        GroupId: !Ref ControlPlaneSecurityGroup
+        IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt ControlPlaneSecurityGroup.GroupId
+
+  AdditionalSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Additional security groups for EKS
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: !Ref VpcBlockMain
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: !Ref VpcBlockEKS      
+      Tags:
+      - Key: Name
+        Value: !Sub "${NamePrefix}-additional"
+
+  AdditionalSecurityGroupIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+        GroupId: !Ref AdditionalSecurityGroup
+        IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt AdditionalSecurityGroup.GroupId
+
+  SharedNodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow all internal communications
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: !Ref VpcBlockMain
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: !Ref VpcBlockEKS          
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-shared-node"
+
+  SharedNodeSecurityGroupIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+        GroupId: !Ref SharedNodeSecurityGroup
+        IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt SharedNodeSecurityGroup.GroupId
+
+  CustomNetworkSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SecurityGroup for CNI Custom Network
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: !Ref VpcBlockMain
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: !Ref VpcBlockEKS              
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-custom-network"
+
+  CustomNetworkSecurityGroupIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+        GroupId: !Ref CustomNetworkSecurityGroup
+        IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt CustomNetworkSecurityGroup.GroupId
+
+  ExternalSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow external ssh for public access
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0       
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIpv6: ::/0                
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 7860
+          ToPort: 7860
+          CidrIp: 0.0.0.0/0   
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          CidrIp: 0.0.0.0/0   
+        - IpProtocol: tcp
+          FromPort: 7557
+          ToPort: 7557
+          CidrIp: 0.0.0.0/0                                                            
+      Tags:
+        - Key: Name
+          Value: !Sub "${NamePrefix}-external"
+
+  ExternalSecurityGroupIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+        GroupId: !Ref ExternalSecurityGroup
+        IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt ExternalSecurityGroup.GroupId
+
+  #######################################################
+  # Security Groups Mutual References  #
+  #######################################################
+  CustomNetwork2SharedNodeIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+        GroupId: !Ref SharedNodeSecurityGroup
+        IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt CustomNetworkSecurityGroup.GroupId
+
+  CustomNetwork2ControlPlaneIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+        GroupId: !Ref ControlPlaneSecurityGroup
+        IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt CustomNetworkSecurityGroup.GroupId
+
+  CustomNetwork2ExternalIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+        GroupId: !Ref ExternalSecurityGroup
+        IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt CustomNetworkSecurityGroup.GroupId
+
+  SharedNode2CustomNetworkIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+        GroupId: !Ref CustomNetworkSecurityGroup
+        IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt SharedNodeSecurityGroup.GroupId
+
+  SharedNode2ControlPlaneIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+        GroupId: !Ref ControlPlaneSecurityGroup
+        IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt SharedNodeSecurityGroup.GroupId
+
+  SharedNode2ExternalIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+        GroupId: !Ref ExternalSecurityGroup
+        IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt SharedNodeSecurityGroup.GroupId
+
+  ControlPlane2SharedNodeIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+        GroupId: !Ref SharedNodeSecurityGroup
+        IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt ControlPlaneSecurityGroup.GroupId
+
+  ControlPlane2CustomNetworkIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+        GroupId: !Ref CustomNetworkSecurityGroup
+        IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt ControlPlaneSecurityGroup.GroupId
+
+  ControlPlane2ExternalNetworkIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+        GroupId: !Ref ExternalSecurityGroup
+        IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt ControlPlaneSecurityGroup.GroupId
+
+  External2SharedNodeIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+        GroupId: !Ref SharedNodeSecurityGroup
+        IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt ExternalSecurityGroup.GroupId
+
+  External2CustomNetwork2Ingress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+        GroupId: !Ref CustomNetworkSecurityGroup
+        IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt ExternalSecurityGroup.GroupId
+
+  External2ControlPlaneIngress:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+        GroupId: !Ref ControlPlaneSecurityGroup
+        IpProtocol: -1
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt ExternalSecurityGroup.GroupId
+
+
+Outputs:
+  VpcId:
+    Description: The VPC Id
+    Value: !Ref VPC
+    
+  ControlPlaneSecurityGroup:
+    Description: Security group for the cluster control plane communication with worker nodes
+    Value: !Join [ ",", [ !Ref ControlPlaneSecurityGroup ] ]
+
+  SharedNodeSecurityGroup:
+    Description: Security group for the Shared Nodes
+    Value: !Join [ ",", [ !Ref SharedNodeSecurityGroup ] ]
+
+  CustomNetworkSecurityGroup:
+    Description: Security group for the Custom Network
+    Value: !Join [ ",", [ !Ref CustomNetworkSecurityGroup ] ]
+
+  ExternalSecurityGroup:
+    Description: Security group for Pod to access external resources
+    Value: !Join [ ",", [ !Ref ExternalSecurityGroup ] ]
+  
+  PublicSubnet1:
+    Description: A reference to the public subnet in the 1st Availability Zone
+    Value: !Ref ELBEgSubnet01
+
+  PublicSubnet2:
+    Description: A reference to the public subnet in the 2nd Availability Zone
+    Value: !Ref ELBEgSubnet02
+
+  PublicSubnet3:
+    Description: A reference to the public subnet in the 3rd Availability Zone
+    Value: !Ref ELBEgSubnet03
+
+  PrivateSubnet1:
+    Description: A reference to the private subnet in the 1st Availability Zone
+    Value: !Ref PrivateSubnet01
+
+  PrivateSubnet2:
+    Description: A reference to the private subnet in the 2nd Availability Zone
+    Value: !Ref PrivateSubnet02
+
+  PrivateSubnet3:
+    Description: A reference to the private subnet in the 3rd Availability Zone
+    Value: !Ref PrivateSubnet03
+
+  PodSubnet1:
+    Description: A reference to the pod subnet in the 1st Availability Zone
+    Value: !Ref PodSubnet01
+
+  PodSubnet2:
+    Description: A reference to the pod subnet in the 2nd Availability Zone
+    Value: !Ref PodSubnet02
+
+  PodSubnet3:
+    Description: A reference to the pod subnet in the 3rd Availability Zone
+    Value: !Ref PodSubnet03
