@@ -17,10 +17,11 @@ wget https://raw.githubusercontent.com/aws-samples/amazon-sagemaker-notebook-ins
 echo "同步回 S3 ..." # Replace with your own bucket and lifecycle name
 aws s3 sync /home/ec2-user/SageMaker/custom/lifecycle/ s3://$IA_S3_BUCKET/sagemaker/lifecycle/$LC_NAME/ 
 
-chmod +x /home/ec2-user/SageMaker/custom/lifecycle/*.sh && chown ec2-user:ec2-user /home/ec2-user/SageMaker/custom/ -R
-nohup /home/ec2-user/SageMaker/custom/lifecycle/sm-al2-init.sh > /home/ec2-user/SageMaker/custom/lifecycle/sm-al2-init.log 2>&1 &  # execute asynchronously
-nohup /home/ec2-user/SageMaker/custom/lifecycle/sm-al2-abc.sh > /home/ec2-user/SageMaker/custom/lifecycle/sm-al2-abc.log 2>&1 &
-/home/ec2-user/SageMaker/custom/lifecycle/sm-al2-jupyter4.sh > /home/ec2-user/SageMaker/custom/lifecycle/sm-al2-jupyter4.log 2>&1
+chmod +x /home/ec2-user/SageMaker/custom/lifecycle/*.sh && chown ec2-user:ec2-user /home/ec2-user/SageMaker/custom/lifecycle/ -R
+nohup /home/ec2-user/SageMaker/custom/lifecycle/sm-al2-init.sh > /home/ec2-user/SageMaker/custom/lifecycle/init.log 2>&1 &  # execute asynchronously
+nohup /home/ec2-user/SageMaker/custom/lifecycle/sm-al2-abc.sh > /home/ec2-user/SageMaker/custom/lifecycle/abc.log 2>&1 &
+/home/ec2-user/SageMaker/custom/lifecycle/sm-al2-jupyter4.sh > /home/ec2-user/SageMaker/custom/lifecycle/jupyter4.log 2>&1
+
 ```
 
 ## 参考

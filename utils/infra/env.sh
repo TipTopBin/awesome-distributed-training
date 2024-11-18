@@ -66,18 +66,10 @@ if ! grep -q "PRI_SUBNET_1" "$BASH_FILE"; then
 	# Extrenal security group
 	export EKS_EXTERNAL_SG=$(aws ec2 describe-security-groups --filters "Name=vpc-id,Values=$EKS_VPC_ID"  "Name=tag:Name,Values=*${NAME_PREFIX}-SG-external*" | jq -r '.SecurityGroups[]|.GroupId')
 
-	# echo "export ACCOUNT_ID=${ACCOUNT_ID}" | tee -a ${BASH_FILE}
-	# echo "export AWS_REGION=${AWS_REGION}" | tee -a ${BASH_FILE}
-	# echo "export EKS_VPC_ID=\"$EKS_VPC_ID\"" >> ${BASH_FILE}
-	# echo "export EKS_VPC_CIDR=\"$EKS_VPC_CIDR\"" >> ${BASH_FILE}
-	# echo "export EKS_CLUSTER_SG=${EKS_CLUSTER_SG}" | tee -a ${BASH_FILE}
-	# echo "export EKS_ADDITIONAL_SG=${EKS_ADDITIONAL_SG}" | tee -a ${BASH_FILE}
-	# echo "export EKS_CUSTOMNETWORK_SG=${EKS_CUSTOMNETWORK_SG}" | tee -a ${BASH_FILE}
-	# echo "export EKS_SHAREDNODE_SG=${EKS_SHAREDNODE_SG}" | tee -a ${BASH_FILE}
-	# echo "export EKS_EXTERNAL_SG=${EKS_EXTERNAL_SG}" | tee -a ${BASH_FILE}
 
   cat >> "$BASH_FILE" <<EOF
-
+export ACCOUNT_ID=${ACCOUNT_ID} 
+export AWS_REGION=${AWS_REGION}
 export VPC_ID=$EKS_VPC_ID
 export VPC_CIDR=$EKS_VPC_CIDR
 export SG_CONTROL_PLANE=${EKS_CLUSTER_SG}
