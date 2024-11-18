@@ -96,60 +96,6 @@ mkdir -p $CUSTOM_DIR/kaggle
 ln -s $CUSTOM_DIR/kaggle ~/.kaggle
 
 
-echo "Install Jupyter Extensions ......"
-# 特意不放在 sm-al2-jupyter.sh 需要等前置升级完成，并且重启后再执行
-source /home/ec2-user/anaconda3/bin/activate JupyterSystemEnv
-pip install amazon-codewhisperer-jupyterlab-ext
-jupyter server extension enable amazon_codewhisperer_jupyterlab_ext
-
-# jupyterlab-lsp 需要的时候手动装
-# # https://github.com/jupyter-lsp/jupyterlab-lsp
-# # https://github.com/aws-samples/sagemaker-studio-lifecycle-config-examples/blob/main/scripts/install-lsp-features/on-jupyter-server-start.sh
-# echo "Installing jupyterlab-lsp and language tools"
-# # 保持简单，启用多个反而会有冲突
-# pip install jupyterlab-lsp \
-#     'python-lsp-server[fall]'
-#     # jupyterlab-spellchecker
-#     # jupyterlab-code-formatter
-# #     'python-lsp-server[flake8,mccabe,pycodestyle,pydocstyle,pyflakes,pylint,rope]' \
-# #     black isort    
-
-# # Some LSP language servers install via JS, not Python. For full list of language servers see:
-# # https://jupyterlab-lsp.readthedocs.io/en/stable/Language%20Servers.html
-# # jlpm add --dev bash-language-server@"<5.0.0" dockerfile-language-server-nodejs
-# npm install --save-dev bash-language-server@"<5.0.0" dockerfile-language-server-nodejs unified-language-server vscode-json-languageserver-bin yaml-language-server
-
-# # This configuration override is optional, to make LSP "extra-helpful" by default:
-# CMP_CONFIG_DIR=~/.jupyter/lab/user-settings/@jupyter-lsp/jupyterlab-lsp/
-# CMP_CONFIG_FILE=completion.jupyterlab-settings
-# CMP_CONFIG_PATH="$CMP_CONFIG_DIR/$CMP_CONFIG_FILE"
-# if test -f $CMP_CONFIG_PATH; then
-#     echo "jupyterlab-lsp config file already exists: Skipping default config setup"
-# else
-#     echo "Setting continuous hinting to enabled by default"
-#     mkdir -p $CMP_CONFIG_DIR
-#     echo '{ "continuousHinting": true }' > $CMP_CONFIG_PATH
-# fi
-
-# # jupyter server extension enable --sys-prefix jupyterlab-lsp jupyterlab-spellchecker # 需要启用，否则会有兼容问题
-# jupyter server extension enable jupyterlab-lsp --sys-prefix
-# # jupyter server extension list --generate-config
-# # jupyter server extension disable jupyterlab-lsp
-
-
-# # 允许访问其他位置的包/代码
-# cat >> ~/.jupyter/jupyter_server_config.py <<EOF
-# c.ContentsManager.allow_hidden = True
-# EOF
-# # 代码跳转设置
-# if [ ! -L ~/SageMaker/.lsp_symlink ]; then
-#   cd ~/SageMaker # 进入 jupyter 根目录
-#   ln -s / .lsp_symlink
-# fi
-
-source /home/ec2-user/anaconda3/bin/deactivate
-
-
 # # https://docs.conda.io/en/latest/miniconda.html
 # # https://github.com/aws-samples/amazon-sagemaker-notebook-instance-lifecycle-config-samples/blob/master/scripts/persistent-conda-ebs/on-create.sh
 # # installs a custom, persistent installation of conda on the Notebook Instance's EBS volume, and ensures

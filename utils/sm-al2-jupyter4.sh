@@ -7,95 +7,8 @@ CONDA_ENV_DIR=~/anaconda3/envs/JupyterSystemEnv/
 BIN_DIR=$CONDA_ENV_DIR/bin
 
 echo "==============================================="
-echo "  Upgrade to JLab-3.x ......"
+echo "  Install Packages ......"
 echo "==============================================="
-################################################################################
-# [IMPLEMENTATION NOTES] Upgrade in-place JupyterSystemEnv instead of a new
-# dedicated conda env for the new JLab, because the existing conda environment
-# has sagemaker nbi agents installed (and possibly other pypi stuffs needed to
-# make notebook instance works).
-################################################################################
-
-# # Disable jupyterlab git extension. For power git users, who don't like to
-# # be distracted by jlab's frequent status changes on lower-left status bar.
-# ~/anaconda3/envs/JupyterSystemEnv/bin/jupyter labextension disable '@jupyterlab/git'
-# ~/anaconda3/envs/JupyterSystemEnv/bin/jupyter labextension disable 'jupyterlab_git'
-# ~/anaconda3/envs/JupyterSystemEnv/bin/jupyter server extension disable jupyterlab_git
-
-# Completely remove these unused or outdated Python packages.
-$BIN_DIR/pip uninstall --yes jupyterlab-git
-
-# These will be outdated by Jlab-3.x which has built-in versions of them.
-declare -a EXTS_TO_DEL=(
-    jupyterlab-celltags
-    jupyterlab-toc
-    jupyterlab-git
-    nbdime-jupyterlab
-)2
-for i in "${EXTS_TO_DEL[@]}"; do
-    rm $CONDA_ENV_DIR/share/jupyter/lab/extensions/$i-*.tgz || true
-done
-
-# Do whatever it takes to prevent JLab pop-up "Build recommended..."
-$BIN_DIR/jupyter lab clean
-cp $CONDA_ENV_DIR/share/jupyter/lab/static/package.json{,.ori}
-cat $CONDA_ENV_DIR/share/jupyter/lab/static/package.json.ori \
-  | jq 'del(.dependencies."@jupyterlab/git", .jupyterlab.extensions."@jupyterlab/git", .jupyterlab.extensionMetadata."@jupyterlab/git")' \
-  > $CONDA_ENV_DIR/share/jupyter/lab/static/package.json
-
-# Also silence JLab pop-up "Build recommended..." due to SageMaker extensions (examples and session agent).
-cat << 'EOF' > ~/.jupyter/jupyter_server_config.json
-{
-  "LabApp": {
-    "tornado_settings": {
-      "page_config_data": {
-        "buildCheck": false,
-        "buildAvailable": false
-      }
-    }
-  }
-}
-EOF
-
-
-# Upgrade jlab & extensions
-# declare -a PKGS=(
-#     ipython
-#     notebook
-#     "nbclassic!=0.4.0"   # https://github.com/jupyter/nbclassic/issues/121
-#     ipykernel
-#     jupyterlab
-#     jupyter-server-proxy
-#     "environment_kernels>=1.2.0"  # https://github.com/Cadair/jupyter_environment_kernels/releases/tag/v1.2.0
-
-#     jupyter
-#     jupyter_client
-#     jupyter_console
-#     jupyter_core
-
-#     jupyter_bokeh
-
-#     # https://github.com/jupyter/nbdime/issues/621
-#     nbdime
-#     ipython_genutils
-
-#     jupyterlab-execute-time
-#     jupyterlab-skip-traceback
-#     # jupyterlab-unfold
-
-#     # jupyterlab_code_formatter requires formatters in its venv.
-#     # See: https://github.com/ryantam626/jupyterlab_code_formatter/issues/153
-#     #
-#     # [20230401] v1.6.0 is broken on python<=3.8
-#     # See: https://github.com/ryantam626/jupyterlab_code_formatter/issues/193#issuecomment-1488742233
-#     "jupyterlab_code_formatter!=1.6.0"
-#     black
-#     isort
-# )
-
-# Overwrite above definition of PKGS to exclude jlab packages. This is done to reduce update time
-# (because sagemaker alinux2 is pretty up-to-date. Usually 1-2 patch versions away only).
-# To still update jlab packages, comment the PKGS definition below and uncomment above one.
 declare -a PKGS=(
     "environment_kernels>=1.2.0"  # https://github.com/Cadair/jupyter_environment_kernels/releases/tag/v1.2.0
     jupyter_bokeh
@@ -116,27 +29,10 @@ declare -a PKGS=(
 $BIN_DIR/pip install --no-cache-dir --upgrade pip  # Let us welcome colorful pip.
 $BIN_DIR/pip install --no-cache-dir --upgrade "${PKGS[@]}"
 
-
 # Pipx to install pre-commit. Otherwise, pre-commit is broken when installed
 # with /usr/bin/pip3 (alinux), but we don't want to use ~/anaconda/bin/pip3
 # either to minimize polluting its site packages.
 ~/anaconda3/bin/pip3 install --no-cache-dir pipx
-
-# Relocate pipx packages to ~/SageMaker to survive reboot
-export PIPX_HOME=~/SageMaker/custom/pipx
-export PIPX_BIN_DIR=~/SageMaker/custom/bin
-# cat << EOF | sudo tee /etc/profile.d/initsmnb-pipx.sh
-
-# # Add pipx binaries to PATH. In addition, add also ~/.local/bin so that its
-# # commands are usable by Jupyter kernels (notable example: docker-compose for
-# # SageMaker local mode).
-# export PATH=\$PATH:$PIPX_BIN_DIR:/home/ec2-user/.local/bin
-# export PIPX_HOME=$PIPX_HOME
-# export PIPX_BIN_DIR=$PIPX_BIN_DIR
-# EOF
-
-# Stop 'pipx install' from warning about path
-export PATH=$PATH:$PIPX_BIN_DIR
 
 declare -a PKG=(
     pre-commit
@@ -181,7 +77,7 @@ done
 
 
 echo "==============================================="
-echo "  Apply Jupyterlab-3+ UI configs ......"
+echo "  Apply Jupyterlab UI configs ......"
 echo "==============================================="
 # Disable notification -- Jlab started to get extremely noisy since v3.6.0+
 mkdir -p $JUPYTER_CONFIG_ROOT/apputils-extension/
@@ -252,51 +148,6 @@ cat > $JUPYTER_CONFIG_ROOT/terminal-extension/plugin.jupyterlab-settings <<EoL
 }
 EoL
 
-# # Undo the old "mac-option-is-meta" mechanism designed for jlab<3.0.
-# echo "# JLab-3 + macOptionIsMeta deprecates fix-osx-keymap.sh" > ~/.inputrc
-# rm ~/.ipython/profile_default/startup/01-osx-jupyterlab-keys.py || true
-
-# mkdir -p $JUPYTER_CONFIG_ROOT/fileeditor-extension/
-# cat << EOF > $JUPYTER_CONFIG_ROOT/fileeditor-extension/plugin.jupyterlab-settings
-# {
-#     "editorConfig": {
-#         "rulers": [80, 100],
-#         "codeFolding": true,
-#         "lineNumbers": true,
-#         "lineWrap": "off"
-#     }
-
-    # "editorConfig": {
-    #     "rulers": [80, 100],
-    #     "codeFolding": true,
-    #     "lineNumbers": true,
-    #     "lineWrap": "off",
-    #     "showTrailingSpace": true,
-    #     "wordWrapColumn": 100
-    # }
-
-# }
-# EOF
-
-# mkdir -p $JUPYTER_CONFIG_ROOT/codemirror-extension/
-# cat << EOF > $JUPYTER_CONFIG_ROOT/codemirror-extension/plugin.jupyterlab-settings
-# {
-#     // CodeMirror
-#     // @jupyterlab/codemirror-extension:plugin
-#     // Text editor settings for all CodeMirror editors.
-#     // ************************************************
-
-#     "defaultConfig": {
-#         "codeFolding": true,
-#         "highlightActiveLine": true,
-#         "highlightTrailingWhitespace": true,
-#         "rulers": [
-#             80,
-#             100
-#         ]
-#     }
-# }
-# EOF
 
 # Show trailing space is brand-new since JLab-3.2.0
 # See: https://jupyterlab.readthedocs.io/en/3.2.x/getting_started/changelog.html#id22
@@ -334,54 +185,6 @@ cat << EOF > $JUPYTER_CONFIG_ROOT/notebook-extension/tracker.jupyterlab-settings
     "recordTiming": true    
 }
 EOF
-
-# cat << EOF > $JUPYTER_CONFIG_ROOT/notebook-extension/tracker.jupyterlab-settings
-# {
-#     "codeCellConfig": {
-#         "rulers": [80, 100],
-#         "codeFolding": true,
-#         "lineNumbers": true,
-#         "lineWrap": "off"
-#     },
-    # "codeCellConfig": {
-    #     "rulers": [80, 100],
-    #     "codeFolding": true,
-    #     "lineNumbers": true,
-    #     "lineWrap": "off",
-    #     "showTrailingSpace": true,
-    #     "wordWrapColumn": 100
-    # },
-
-#     "markdownCellConfig": {
-#         "rulers": [80, 100],
-#         "codeFolding": true,
-#         "lineNumbers": true,
-#         "lineWrap": "off"
-#     },
-
-    # "markdownCellConfig": {
-    #     "rulers": [80, 100],
-    #     "codeFolding": true,
-    #     "lineNumbers": true,
-    #     "lineWrap": "off",
-    #     "showTrailingSpace": true,
-    #     "wordWrapColumn": 100
-    # },
-    # "rawCellConfig": {
-    #     "rulers": [80, 100],
-    #     "lineNumbers": true,
-    #     "lineWrap": "off",
-    #     "showTrailingSpace": true,
-    #     "wordWrapColumn": 100
-    # },
-
-#     "rawCellConfig": {
-#         "rulers": [80, 100],
-#         "lineNumbers": true,
-#         "lineWrap": "off"
-#     }
-# }
-# EOF
 
 
 # Since: jlab-3.1.0
@@ -657,60 +460,6 @@ if [[ ! -z "$TMUX" ]]; then
     done
 fi
 EOF
-
-
-echo "Install Jupyter Extensions ......"
-# 特意不放在 sm-al2-jupyter.sh 需要等前置升级完成，并且重启后再执行
-source /home/ec2-user/anaconda3/bin/activate JupyterSystemEnv
-pip install amazon-codewhisperer-jupyterlab-ext
-jupyter server extension enable amazon_codewhisperer_jupyterlab_ext
-
-# jupyterlab-lsp 需要的时候手动装
-# # https://github.com/jupyter-lsp/jupyterlab-lsp
-# # https://github.com/aws-samples/sagemaker-studio-lifecycle-config-examples/blob/main/scripts/install-lsp-features/on-jupyter-server-start.sh
-# echo "Installing jupyterlab-lsp and language tools"
-# # 保持简单，启用多个反而会有冲突
-# pip install jupyterlab-lsp \
-#     'python-lsp-server[fall]'
-#     # jupyterlab-spellchecker
-#     # jupyterlab-code-formatter
-# #     'python-lsp-server[flake8,mccabe,pycodestyle,pydocstyle,pyflakes,pylint,rope]' \
-# #     black isort    
-
-# # Some LSP language servers install via JS, not Python. For full list of language servers see:
-# # https://jupyterlab-lsp.readthedocs.io/en/stable/Language%20Servers.html
-# # jlpm add --dev bash-language-server@"<5.0.0" dockerfile-language-server-nodejs
-# npm install --save-dev bash-language-server@"<5.0.0" dockerfile-language-server-nodejs unified-language-server vscode-json-languageserver-bin yaml-language-server
-
-# # This configuration override is optional, to make LSP "extra-helpful" by default:
-# CMP_CONFIG_DIR=~/.jupyter/lab/user-settings/@jupyter-lsp/jupyterlab-lsp/
-# CMP_CONFIG_FILE=completion.jupyterlab-settings
-# CMP_CONFIG_PATH="$CMP_CONFIG_DIR/$CMP_CONFIG_FILE"
-# if test -f $CMP_CONFIG_PATH; then
-#     echo "jupyterlab-lsp config file already exists: Skipping default config setup"
-# else
-#     echo "Setting continuous hinting to enabled by default"
-#     mkdir -p $CMP_CONFIG_DIR
-#     echo '{ "continuousHinting": true }' > $CMP_CONFIG_PATH
-# fi
-
-# # jupyter server extension enable --sys-prefix jupyterlab-lsp jupyterlab-spellchecker # 需要启用，否则会有兼容问题
-# jupyter server extension enable jupyterlab-lsp --sys-prefix
-# # jupyter server extension list --generate-config
-# # jupyter server extension disable jupyterlab-lsp
-
-
-# # 允许访问其他位置的包/代码
-# cat >> ~/.jupyter/jupyter_server_config.py <<EOF
-# c.ContentsManager.allow_hidden = True
-# EOF
-# # 代码跳转设置
-# if [ ! -L ~/SageMaker/.lsp_symlink ]; then
-#   cd ~/SageMaker # 进入 jupyter 根目录
-#   ln -s / .lsp_symlink
-# fi
-
-source /home/ec2-user/anaconda3/bin/deactivate
 
 
 echo 'To enforce the change to jupyter config: sudo initctl restart jupyter-server --no-wait'

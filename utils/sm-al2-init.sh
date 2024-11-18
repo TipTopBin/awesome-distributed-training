@@ -12,8 +12,6 @@ mkdir -p "$CUSTOM_DIR"/bin && \
   mkdir -p "$CUSTOM_DIR"/tmp && \
   mkdir -p "$CUSTOM_DIR"/logs
 
-# mkdir -p /home/ec2-user/SageMaker/labs
-
 # if [ ! -d "$CUSTOM_DIR" ]; then
 if ! grep -q "CUSTOM_BASH" $CUSTOM_BASH; then
   echo "Set custom dir and bashrc"
@@ -22,6 +20,11 @@ if ! grep -q "CUSTOM_BASH" $CUSTOM_BASH; then
 
   echo "export CUSTOM_DIR=${CUSTOM_DIR}" >> $CUSTOM_BASH
   echo "export CUSTOM_BASH=${CUSTOM_BASH}" >> $CUSTOM_BASH
+  # Relocate pipx packages to ~/SageMaker to survive reboot
+  echo "export PIPX_HOME=~/SageMaker/custom/pipx" >> $CUSTOM_BASH
+  echo "export PIPX_BIN_DIR=~/SageMaker/custom/bin" >> $CUSTOM_BASH
+  # Add pipx binaries to PATH. In addition, add also ~/.local/bin so that its
+  # commands are usable by Jupyter kernels (notable example: docker-compose for SageMaker local mode).
   echo 'export PATH=$PATH:/home/ec2-user/SageMaker/custom/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/sbin:/bin:/home/ec2-user/.local/bin' >> $CUSTOM_BASH
 fi
 
