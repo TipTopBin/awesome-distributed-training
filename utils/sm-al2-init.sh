@@ -123,8 +123,7 @@ then
   sudo chmod 400 ~/.ssh/id_rsa
   sudo chown -R ec2-user:ec2-user ~/.ssh/
   # ssh-keygen -f ~/.ssh/id_rsa -y > ~/.ssh/id_rsa.pub
-
-  # 本地免密，方便 EKS Node 能反向 SSH 到 Notebook Instance
+  # 免密登录
   {
   cat ~/.ssh/id_rsa.pub|tr '\n' ' '
   } >> ~/.ssh/authorized_keys
