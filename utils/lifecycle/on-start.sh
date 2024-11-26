@@ -32,7 +32,7 @@ else
 fi
 echo "Found boto3 at $PYTHON_DIR"
 echo "Starting the SageMaker autostop script in cron"
-(crontab -l 2>/dev/null; echo "*/5 * * * * $PYTHON_DIR /home/ec2-user/SageMaker/custom/autostop.py --time $IDLE_TIME --ignore-connections >> /var/log/jupyter.log") | crontab -
+(crontab -l 2>/dev/null; echo "*/5 * * * * $PYTHON_DIR /home/ec2-user/SageMaker/custom/lifecycle/autostop.py --time $IDLE_TIME --ignore-connections >> /var/log/jupyter.log") | crontab -
 
 
 echo "Restarting the Jupyter server.."
