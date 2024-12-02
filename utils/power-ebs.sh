@@ -5,8 +5,16 @@ SIZE=${1:-1000}
 IOPS=${2:-6000}
 THROUGHPUT=${3:-1000}
 
-# Get the ID of the environment host Amazon EC2 instance.
-INSTANCEID=$(curl http://169.254.169.254/latest/meta-data/instance-id)
+# 获取 IMDSv2 令牌
+TOKEN=$(curl -X PUT -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" http://169.254.169.254/latest/api/token)
+# 使用令牌获取实例 ID
+INSTANCEID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
+# INSTANCEID=$(curl http://169.254.169.254/latest/meta-data/instance-id)
+if [ -z "$INSTANCEID" ]; then
+    echo "Error: Failed to get Instance ID"
+    exit 1
+fi
+echo "Instance ID: $INSTANCEID"
 
 # Get the ID of the Amazon EBS volume associated with the instance.
 VOLUMEID=$(aws ec2 describe-instances \

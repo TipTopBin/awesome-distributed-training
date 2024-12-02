@@ -238,9 +238,9 @@ echo "==============================================="
 
 if [ ! -f $CUSTOM_DIR/flink-1.16.3/bin/flink ]; then
   echo "Setup Flink 1.16"
-  wget https://dlcdn.apache.org/flink/flink-1.16.3/flink-1.16.3-bin-scala_2.12.tgz
+  wget https://archive.apache.org/dist/flink/flink-1.16.3/flink-1.16.3-bin-scala_2.12.tgz -O /tmp/flink-1.16.3-bin-scala_2.12.tgz
   # wget https://archive.apache.org/dist/flink/flink-1.15.3/flink-1.15.3-bin-scala_2.12.tgz -O /tmp/flink-1.15.3.tgz
-  sudo tar xzvf flink-*.tgz -C $CUSTOM_DIR/
+  sudo tar xzvf /tmp/flink-*.tgz -C $CUSTOM_DIR/
   sudo chown -R ec2-user $CUSTOM_DIR/flink-1.16.3
   # flink -v
   cat >> ~/SageMaker/custom/bashrc <<EOF
@@ -248,16 +248,6 @@ export PATH="$CUSTOM_DIR/flink-1.16.3/bin:\$PATH"
 EOF
 
 fi
-
-# if [ ! -f $CUSTOM_DIR/flink-1.15.3/bin/flink ]; then
-#   echo "Setup Flink 1.15"
-#   wget https://archive.apache.org/dist/flink/flink-1.15.3/flink-1.15.3-bin-scala_2.12.tgz -O /tmp/flink-1.15.3.tgz
-#   sudo tar xzvf /tmp/flink-1.15.3.tgz -C $CUSTOM_DIR/
-#   sudo chown -R ec2-user $CUSTOM_DIR/flink-1.15.3
-#   # flink -v
-#   cat >> ~/SageMaker/custom/bashrc <<EOF
-# export PATH="$CUSTOM_DIR/flink-1.15.3/bin:\$PATH"
-# EOF
 
 
 echo "

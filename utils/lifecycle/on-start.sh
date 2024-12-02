@@ -16,8 +16,7 @@ EOF
 
 # Under root
 echo "Auto stop to save cost ..."
-IDLE_TIME=16200 # 4.5 hour
-# IDLE_TIME=28800 # 8 hour
+IDLE_TIME=16200 # 4.5 hour 28800 8 hour
 # umask 022
 
 CONDA_PYTHON_DIR=$(source /home/ec2-user/anaconda3/bin/activate /home/ec2-user/anaconda3/envs/JupyterSystemEnv && which python)

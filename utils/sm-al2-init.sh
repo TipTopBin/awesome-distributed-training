@@ -274,6 +274,16 @@ fi
 sudo yum localinstall -y $CUSTOM_DIR/bin/duf.rpm
 
 
+if [ ! -f $CUSTOM_DIR/go/bin/go ]; then
+  echo "  Install Go ......"
+  wget https://go.dev/dl/go1.23.3.linux-amd64.tar.gz -O /tmp/go.tar.gz
+  sudo tar xzvf /tmp/go.tar.gz -C $CUSTOM_DIR
+  cat >> ~/SageMaker/custom/bashrc <<EOF
+export PATH="$CUSTOM_DIR/go/bin:\$PATH"
+EOF
+fi
+
+
 echo "==============================================="
 echo "  Container tools ......"
 echo "==============================================="
