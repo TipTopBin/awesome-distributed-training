@@ -14,7 +14,7 @@ declare -a PKGS=(
     jupyter_bokeh
     jupyterlab-execute-time
     jupyterlab-skip-traceback
-    jupyterlab-unfold
+    # jupyterlab-unfold
     ipython_genutils  # https://github.com/jupyter/nbdime/issues/621
 
     # jupyterlab_code_formatter requires formatters in its venv.
