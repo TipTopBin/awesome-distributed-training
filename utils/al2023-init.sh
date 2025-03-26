@@ -540,7 +540,7 @@ if ! grep -q "KREW_ROOT" $CUSTOM_BASH; then
   cat >> $CUSTOM_BASH <<EOF
 
 # Start adding by al2023-init
-
+export PROJECT_ROOT=$PROJECT_ROOT
 export HISTFILE=${CUSTOM_DIR}/bash_history # Persistent bash history
 alias ..='source ~/.bashrc'
 alias c=clear
@@ -570,6 +570,7 @@ man() {
         man "\$@"
 }
 
+export PROJECT_ROOT=$PROJECT_ROOT
 export DSTAT_OPTS="-cdngym"
 export TERM=xterm-256color
 export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no"
