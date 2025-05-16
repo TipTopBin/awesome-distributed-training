@@ -296,6 +296,9 @@ export PATH="$CUSTOM_DIR/go/bin:\$PATH"
 EOF
 fi
 
+# uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
 
 echo "==============================================="
 echo "  Container tools ......"
