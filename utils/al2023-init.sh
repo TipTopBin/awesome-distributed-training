@@ -296,9 +296,6 @@ export PATH="$CUSTOM_DIR/go/bin:\$PATH"
 EOF
 fi
 
-# uv
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
 
 echo "==============================================="
 echo "  Container tools ......"
@@ -429,6 +426,41 @@ fi
 
 
 echo "==============================================="
+echo "  Dev ......"
+echo "==============================================="
+# Check if nvm is already installed
+if [ ! -d "$HOME/.nvm" ]; then
+  # Download and install nvm
+  echo "Installing nvm..."
+  curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+  
+  # Load nvm without restarting the shell
+  export NVM_DIR="$HOME/.nvm"
+  [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+else
+  # Load existing nvm
+  echo "nvm already installed, loading it..."
+  export NVM_DIR="$HOME/.nvm"
+  [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+fi
+
+# Install Node.js if not already installed
+if ! command -v node &> /dev/null || [[ "$(node -v)" != *"v22"* ]]; then
+  echo "Installing Node.js v22..."
+  nvm install 22
+fi
+
+# Verify installation
+echo "Node.js version: $(node -v)"
+echo "Current nvm version: $(nvm current)"
+echo "npm version: $(npm -v)"
+
+# uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+
+
+echo "==============================================="
 echo "  GenAI tools ......"
 echo "==============================================="
 # q developer cli
@@ -438,6 +470,7 @@ if [ ! -f $CUSTOM_DIR/bin/q.zip ]; then
   # codecatalyst.aws
   # $CUSTOM_DIR/bin/q/install.sh
 fi
+
 
 
 echo "==============================================="
