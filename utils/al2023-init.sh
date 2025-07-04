@@ -195,7 +195,8 @@ sudo yum -y install \
     telnet \
     mtr \
     traceroute \
-    netcat
+    netcat \
+    tmux
 sudo yum install -y \
     htop \
     tree \
