@@ -1,73 +1,88 @@
 #!/bin/bash
 
 # power-ebs.sh - Resize root EBS volume and filesystem
-# Usage: ./power-ebs.sh [size_GB] [iops] [throughput_MB]
+# Usage: 
+#   ./power-ebs.sh [size_GB] [iops] [throughput_MB]  # Full resize (default)
+#   ./power-ebs.sh --fs-only                         # Only expand filesystem
 # Default: 1000 GB, 6000 IOPS, 1000 MB/s throughput
 
 set -e
 
-# Parse command line arguments with defaults
-SIZE=${1:-1000}
-IOPS=${2:-6000}
-THROUGHPUT=${3:-1000}
-
-echo "============================================================"
-echo "EBS Volume Resizing Tool"
-echo "Target: $SIZE GB, $IOPS IOPS, $THROUGHPUT MB/s throughput"
-echo "============================================================"
-
-# Get IMDSv2 token and instance ID
-TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
-INSTANCEID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
-
-if [ -z "$INSTANCEID" ]; then
-    echo "Error: Failed to get Instance ID. Are you running on EC2?"
-    exit 1
+# Check for filesystem-only mode
+if [[ "$1" == "--fs-only" ]]; then
+    echo "============================================================"
+    echo "Filesystem Expansion Tool (EBS already resized)"
+    echo "Expanding filesystem to use available EBS space"
+    echo "============================================================"
+    FS_ONLY=true
+else
+    # Parse command line arguments with defaults
+    SIZE=${1:-1000}
+    IOPS=${2:-6000}
+    THROUGHPUT=${3:-1000}
+    echo "============================================================"
+    echo "EBS Volume Resizing Tool"
+    echo "Target: $SIZE GB, $IOPS IOPS, $THROUGHPUT MB/s throughput"
+    echo "============================================================"
+    FS_ONLY=false
 fi
 
-echo "Instance ID: $INSTANCEID"
+# Get IMDSv2 token and instance ID (only needed for EBS modification)
+if [ "$FS_ONLY" = false ]; then
+    TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+    INSTANCEID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
 
-# Get the root EBS volume ID
-VOLUMEID=$(aws ec2 describe-instances \
-  --instance-id $INSTANCEID \
-  --query "Reservations[0].Instances[0].BlockDeviceMappings[0].Ebs.VolumeId" \
-  --output text)
-
-if [ -z "$VOLUMEID" ] || [ "$VOLUMEID" = "None" ]; then
-    echo "Error: Failed to get volume ID"
-    exit 1
-fi
-
-echo "Volume ID: $VOLUMEID"
-
-# Modify the EBS volume
-echo "Modifying EBS volume..."
-aws ec2 modify-volume --volume-id $VOLUMEID \
-    --volume-type gp3 \
-    --size $SIZE \
-    --iops $IOPS \
-    --throughput $THROUGHPUT
-
-# Wait for volume modification to start (no need to wait for full completion)
-echo "Waiting for volume modification to initialize..."
-while true; do
-    STATE=$(aws ec2 describe-volumes-modifications \
-      --volume-id $VOLUMEID \
-      --query "VolumesModifications[0].ModificationState" \
-      --output text)
-    
-    echo "Current state: $STATE"
-    if [ "$STATE" = "optimizing" ] || [ "$STATE" = "completed" ]; then
-        echo "Volume modification in progress or completed"
-        break
-    elif [ "$STATE" = "failed" ]; then
-        echo "Volume modification failed!"
+    if [ -z "$INSTANCEID" ]; then
+        echo "Error: Failed to get Instance ID. Are you running on EC2?"
         exit 1
     fi
-    sleep 5
-done
 
-echo "Proceeding with volume size $SIZE GB, IOPS $IOPS, throughput $THROUGHPUT MB/s"
+    echo "Instance ID: $INSTANCEID"
+
+    # Get the root EBS volume ID
+    VOLUMEID=$(aws ec2 describe-instances \
+      --instance-id $INSTANCEID \
+      --query "Reservations[0].Instances[0].BlockDeviceMappings[0].Ebs.VolumeId" \
+      --output text)
+
+    if [ -z "$VOLUMEID" ] || [ "$VOLUMEID" = "None" ]; then
+        echo "Error: Failed to get volume ID"
+        exit 1
+    fi
+
+    echo "Volume ID: $VOLUMEID"
+
+    # Modify the EBS volume
+    echo "Modifying EBS volume..."
+    aws ec2 modify-volume --volume-id $VOLUMEID \
+        --volume-type gp3 \
+        --size $SIZE \
+        --iops $IOPS \
+        --throughput $THROUGHPUT
+
+    # Wait for volume modification to start (no need to wait for full completion)
+    echo "Waiting for volume modification to initialize..."
+    while true; do
+        STATE=$(aws ec2 describe-volumes-modifications \
+          --volume-id $VOLUMEID \
+          --query "VolumesModifications[0].ModificationState" \
+          --output text)
+        
+        echo "Current state: $STATE"
+        if [ "$STATE" = "optimizing" ] || [ "$STATE" = "completed" ]; then
+            echo "Volume modification in progress or completed"
+            break
+        elif [ "$STATE" = "failed" ]; then
+            echo "Volume modification failed!"
+            exit 1
+        fi
+        sleep 5
+    done
+
+    echo "Proceeding with volume size $SIZE GB, IOPS $IOPS, throughput $THROUGHPUT MB/s"
+else
+    echo "Skipping EBS modification, proceeding directly to filesystem expansion..."
+fi
 
 # Detect root device
 ROOT_DEVICE=$(findmnt -n -o SOURCE /)
@@ -129,6 +144,11 @@ case "$FS_TYPE" in
 esac
 
 echo "============================================================"
-echo "EBS volume and filesystem successfully resized!"
-echo "New filesystem size: $(df -h / | awk 'NR==2 {print $2}')"
+if [ "$FS_ONLY" = true ]; then
+    echo "Filesystem successfully expanded!"
+else
+    echo "EBS volume and filesystem successfully resized!"
+fi
+echo "Current filesystem size: $(df -h / | awk 'NR==2 {print $2}')"
+echo "Available space: $(df -h / | awk 'NR==2 {print $4}')"
 echo "============================================================"
