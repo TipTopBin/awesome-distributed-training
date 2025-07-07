@@ -371,11 +371,7 @@ if [ ! -d $CUSTOM_DIR/bin/krew ]; then
 fi
 
 
-# k8sgpt
-if [ ! -f $CUSTOM_DIR/bin/k8sgpt_Linux_x86_64.tar.gz ]; then
-  wget -O $CUSTOM_DIR/bin/k8sgpt_Linux_x86_64.tar.gz https://github.com/k8sgpt-ai/k8sgpt/releases/download/v0.3.25/k8sgpt_Linux_x86_64.tar.gz
-  tar -xvf $CUSTOM_DIR/bin/k8sgpt_Linux_x86_64.tar.gz -C $CUSTOM_DIR/bin
-fi
+
 
 # docker
 if [ -f /etc/yum.repos.d/docker-ce.repo ]; then  
@@ -627,7 +623,6 @@ export KREW_ROOT="\$CUSTOM_DIR/bin/krew"
 alias nlog=eks-log-collector.sh
 alias dfimage="docker run -v /var/run/docker.sock:/var/run/docker.sock --rm ghcr.io/laniksj/dfimage"
 alias kk='kubectl-karpenter.sh'
-alias kb='k8sgpt'
 alias kt=kubetail
 alias kgn='kubectl get nodes -L beta.kubernetes.io/arch -L karpenter.sh/capacity-type -L node.kubernetes.io/instance-type -L topology.kubernetes.io/zone -L karpenter.sh/nodepool'
 alias kgp='kubectl get po -o wide'
