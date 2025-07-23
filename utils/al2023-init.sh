@@ -464,6 +464,7 @@ echo "==============================================="
 if [ ! -f $CUSTOM_DIR/bin/q.zip ]; then
   curl --proto '=https' --tlsv1.2 -sSf "https://desktop-release.codewhisperer.us-east-1.amazonaws.com/latest/q-x86_64-linux.zip" -o "$CUSTOM_DIR/bin/q.zip"
   unzip -o $CUSTOM_DIR/bin/q.zip -d $CUSTOM_DIR/bin
+  $CUSTOM_DIR/bin/q/install.sh --no-confirm
   # codecatalyst.aws
   # $CUSTOM_DIR/bin/q/install.sh
 fi
