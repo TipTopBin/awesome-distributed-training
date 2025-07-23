@@ -32,6 +32,8 @@ print_header() {
 
 print_header "🚀 Welcome to the Initialization Script! 🚀"
 
+mkdir -p ~/.aws/amazonq && ln -s ~/.aws/amazonq "$PROJECT_ROOT"/amazonq
+
 mkdir -p "$CUSTOM_DIR"/bin && \
   mkdir -p "$CUSTOM_DIR"/docker && \
   mkdir -p "$CUSTOM_DIR"/envs && \
