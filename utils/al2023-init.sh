@@ -217,7 +217,7 @@ sudo yum install -y \
     git-lfs \
     nvme-cli \
     aria2
-dnf install -y iputils bash-completion
+sudo dnf install -y iputils bash-completion
 
 if [ ! -f $CUSTOM_DIR/bin/yq ]; then
   wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O $CUSTOM_DIR/bin/yq
