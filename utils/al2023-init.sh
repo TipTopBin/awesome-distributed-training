@@ -373,8 +373,6 @@ if [ ! -d $CUSTOM_DIR/bin/krew ]; then
 fi
 
 
-
-
 # docker
 if [ -f /etc/yum.repos.d/docker-ce.repo ]; then  
   sudo rm /etc/yum.repos.d/docker-ce.repo || true # Lots of problem, from wrong .repo content to broken selinux-container
@@ -421,6 +419,17 @@ fi
 if [ -f "$HOME/anaconda3/bin/docker-compose" ]; then
   mkdir -p ~/.local/bin
   ln -s "$HOME/anaconda3/bin/docker-compose" ~/.local/bin/ 2>/dev/null || true
+fi
+
+
+# https://github.com/awslabs/eks-node-viewer
+export GOBIN=${GOBIN:-~/go/bin}
+if [ ! -f $GOBIN/eks-node-viewer ]; then
+  go env -w GOPROXY=direct
+  go install github.com/awslabs/eks-node-viewer/cmd/eks-node-viewer@latest
+fi
+if ! grep -q "GOBIN" $CUSTOM_BASH; then
+  echo "export PATH=\$PATH:$GOBIN" >> ~/.bashrc
 fi
 
 
@@ -627,6 +636,7 @@ alias nlog=eks-log-collector.sh
 alias dfimage="docker run -v /var/run/docker.sock:/var/run/docker.sock --rm ghcr.io/laniksj/dfimage"
 alias kk='kubectl-karpenter.sh'
 alias kt=kubetail
+alias egn='eks-node-viewer'
 alias kgn='kubectl get nodes -L beta.kubernetes.io/arch -L karpenter.sh/capacity-type -L node.kubernetes.io/instance-type -L topology.kubernetes.io/zone -L karpenter.sh/nodepool'
 alias kgp='kubectl get po -o wide'
 alias kga='kubectl get all'
