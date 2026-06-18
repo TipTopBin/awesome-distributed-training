@@ -470,10 +470,15 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # GitHub CLI (gh)
 if [ ! -f $CUSTOM_DIR/bin/gh ]; then
   echo "  Install GitHub CLI ......"
-  GH_URL=$(curl -fsSL "https://api.github.com/repos/cli/cli/releases/latest" | grep "browser_download_url.*linux_amd64.tar.gz\"" | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+  ARCH=$(uname -m)
+  case "$ARCH" in
+    aarch64|arm64) GH_ARCH="linux_arm64" ;;
+    *) GH_ARCH="linux_amd64" ;;
+  esac
+  GH_URL=$(curl -fsSL "https://api.github.com/repos/cli/cli/releases/latest" | grep "browser_download_url.*${GH_ARCH}.tar.gz\"" | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
   curl -Lo /tmp/gh.tar.gz "$GH_URL"
   tar -xzf /tmp/gh.tar.gz -C /tmp
-  cp /tmp/gh_*_linux_amd64/bin/gh $CUSTOM_DIR/bin/gh
+  cp /tmp/gh_*_${GH_ARCH}/bin/gh $CUSTOM_DIR/bin/gh
   chmod +x $CUSTOM_DIR/bin/gh
 fi
 gh --version
